@@ -15,6 +15,7 @@ A full rebuild on the stack and dashboard of [Warden](https://github.com/momardi
 - Recipient page: instructions, folders they may use, their own files, password page, expired page, phone layout.
 - Automatic provisioning of D1 and R2 on deploy (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.
 - API keys show when they were created and last used.
+- In Cloudflare Workers Builds the app builds itself after the dependency install, so Workers connected with the 0.1.0 settings (no build command) deploy without changes. Node 22 is pinned in `.node-version`.
 
 ### Changed
 - The API moved to `/api/v1`. Recipient endpoints are `/api/v1/share/<token>/...`; parts are sent with `PUT .../uploads/<id>/parts/<n>` (no "prepare part" step); file downloads are `.../files/<id>/download` and previews `.../files/<id>/preview`. File lists are newest first with an opaque `next` cursor. See [API.md](API.md).

@@ -129,6 +129,8 @@ npx wrangler secret put SESSION_SECRET     # recommended: openssl rand -hex 32
 
 Nothing to fill into `wrangler.jsonc`: it has no `database_id` and no `bucket_name` on purpose. On deploy Wrangler creates `<worker-name>-db` and a bucket for the Worker and keeps reusing them, so two installs on one account never share data. The Worker applies its own migrations on the first request, so there is no migration step either (`npm run migrate:remote` remains available as a fallback). Set the optional `DB_SUFFIX` build variable to name the database `<worker-name>-<suffix>` instead.
 
+**Connected repository (Workers Builds).** The recommended settings are build command `npm run build` and deploy command `npx wrangler deploy`. A Worker connected before 0.2.0 may still have an empty build command: in Workers Builds (`WORKERS_CI=1`) Folvio builds itself right after `npm ci`, so the deploy works either way. Node 22 is pinned in `.node-version`.
+
 Use a custom domain (Workers → your Worker → Settings → Domains) so shared links do not depend on `workers.dev`.
 
 > **Set `SESSION_SECRET` before you share links.** It signs cookies and hashes collection passwords. Changing it later signs recipients out and makes existing collection passwords stop matching (set them again).

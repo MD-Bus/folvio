@@ -14,7 +14,8 @@
 		"dev": "npm run migrate && react-router dev",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
-		"test": "tsx --test tests/*.test.ts"
+		"test": "tsx --test tests/*.test.ts",
+		"postinstall": "node scripts/ci-build.mjs"
 	},
 	"dependencies": {
 		"@radix-ui/react-avatar": "^1.1.11",
