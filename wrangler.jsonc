@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "folvio",
+  "main": "src/index.js",
+  "compatibility_date": "2026-01-01",
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "folvio-db",
+      "database_id": "replace-after-creation",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "folvio-files"
+    }
+  ],
+  "vars": {
+    "STORAGE_LIMIT_BYTES": "8000000000"
+  },
+  "triggers": {
+    "crons": [
+      "0 * * * *"
+    ]
+  }
+}

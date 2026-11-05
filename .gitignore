@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+.env
+test-results/
+wrangler.staging.json
+cors.staging.json
+
+# Local credentials and OS files
+.dev.vars.*
+.env.*
+.DS_Store
+*.log
