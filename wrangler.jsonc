@@ -1,36 +1,28 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "folvio",
-  "main": "src/index.js",
-  "compatibility_date": "2026-01-01",
-  "assets": {
-    "directory": "public",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*"
-    ]
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "folvio-db",
-      "database_id": "replace-after-creation",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "folvio-files"
-    }
-  ],
-  "vars": {
-    "STORAGE_LIMIT_BYTES": "8000000000"
-  },
-  "triggers": {
-    "crons": [
-      "0 * * * *"
-    ]
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "folvio",
+	"compatibility_date": "2025-04-04",
+	"compatibility_flags": ["nodejs_compat"],
+	"main": "./workers/app.ts",
+	"observability": { "enabled": true },
+	// Smart Placement: Cloudflare may run the Worker close to the database instead of close to the visitor.
+	"placement": { "mode": "smart" },
+	// No database_name / database_id on purpose. On deploy Wrangler creates a database named
+	// "<worker-name>-db" and keeps reusing it. Worker names are unique per account, so two installs never
+	// share a database. The tables are created and upgraded by the Worker itself on the first request.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"migrations_dir": "migrations"
+		}
+	],
+	// The uploaded files. No bucket_name on purpose: like the database, Wrangler creates the bucket on deploy and
+	// keeps reusing it. R2 must be activated once in the Cloudflare dashboard. Keep the bucket private.
+	"r2_buckets": [{ "binding": "FILES" }],
+	"vars": {
+		// Installation-wide storage limit in bytes (uploads in progress count). Lower it when the account has other buckets.
+		"STORAGE_LIMIT_BYTES": "8000000000"
+	},
+	// Hourly housekeeping: aborts abandoned uploads, releases their reserved space, deletes expired sessions.
+	"triggers": { "crons": ["0 * * * *"] }
 }

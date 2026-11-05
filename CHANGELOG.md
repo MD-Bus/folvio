@@ -2,49 +2,28 @@
 
 All notable changes to Folvio, newest first. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
-Folvio is pre-1.0. Minor versions may change the API or data model; compatibility changes will be listed under **Changed** or **Removed**, with migration guidance. See [ROADMAP.md](ROADMAP.md).
+## 0.2.0 (unreleased)
 
-## 0.1.0 — Unreleased
-
-Initial pre-release implementation, verified locally and on isolated Cloudflare staging. Not yet published as a release.
+A full rebuild on the stack and dashboard of [Warden](https://github.com/momardia54/Warden). The database of 0.1.0 is kept: migrations 0001-0003 are unchanged and 0004 only adds columns and an index.
 
 ### Added
-
-- Single-administrator login using Worker runtime secrets, server-side sessions, logout and login throttling.
-- Responsive dashboard with light/dark themes and collection, file and API key management.
-- Five-step collection wizard: details, upload limits, nested folder tree, recipient permissions and sharing.
-- Stable random collection links, optional passwords, expiration and storage/file-size limits.
-- Administrator folder creation, rename, move and deletion of empty folders.
-- Collection-level upload, folder creation and own-folder rename permissions, with folder overrides and hidden subtrees.
-- Recipient folder creation disabled by default; permissions enforced server-side for UI and API requests.
-- Worker-streamed multipart uploads with exact part-length checks, atomic storage reservations and completion size verification.
-- Bounded hourly cleanup for abandoned uploads and expired authentication records.
-- Administrator file downloads and deletion; recipient listing limited to their own uploads.
-- Revocable, hashed administrator API keys and a documented JSON API.
-- SQLite/API tests, security tests and a separate Cloudflare emulator test.
-- Deployment instructions, free-tier architecture notes and acceptance checklist.
-- Project README, logo, Deploy to Cloudflare link, roadmap and security policy matching the related projects' documentation style.
+- **Share links work for programs and AI agents.** `/s/<token>` answers a JSON manifest (folders with paths, limits, permissions, instructions) when asked for `application/json`; one-request uploads with `PUT /api/v1/share/<token>/upload/<name>?folder=Branding/Logos`; `X-Folvio-Recipient` and `X-Folvio-Password` headers instead of cookies; folders by path everywhere. The Share dialog offers the commands and a ready-made message for an AI agent.
+- Dashboard of Warden: sidebar, ⌘K search for collections and files, light/dark/system themes, overview with storage, uploads in progress and a 30-day chart.
+- Wizard with folder templates; folder links tab; replace the collection link; delete a collection with its files.
+- File browser: grid with image previews or list, search across the collection, select, move, rename, delete, download; per-folder counts.
+- Upload queue with drag and drop, progress per file, cancel, a retry per part, and a warning before leaving the page.
+- Recipient page: instructions, folders they may use, their own files, password page, expired page, phone layout.
+- Automatic provisioning of D1 and R2 on deploy (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.
+- API keys show when they were created and last used.
 
 ### Changed
+- The API moved to `/api/v1`. Recipient endpoints are `/api/v1/share/<token>/...`; parts are sent with `PUT .../uploads/<id>/parts/<n>` (no "prepare part" step); file downloads are `.../files/<id>/download` and previews `.../files/<id>/preview`. File lists are newest first with an opaque `next` cursor. See [API.md](API.md).
+- Dashboard logins: 10 attempts per 15 minutes per address. Existing dashboard sessions of 0.1.0 must sign in again; recipient cookies, API keys and collection passwords keep working.
+- Recipient cookies are SameSite=Lax so a link opened from an e-mail is recognised on the first page load.
 
-- Uploads and downloads now stream through the Worker using its R2 binding. Removed S3 credentials, presigned URLs and R2 CORS setup.
-- Added automatic CLI resource provisioning and migrations.
-- Added grid/list file management, small raster previews, rename/move/delete controls and directory-scoped upload links (migration 0003).
+### Removed
+- `scripts/deploy.mjs` (Wrangler provisions the resources itself) and the 0.1.0 static frontend (`public/app.js`).
 
-### Fixed
+## 0.1.0 (unreleased)
 
-- Reject non-object JSON bodies and malformed multipart entries with client errors.
-- Track collection revisions so concurrent folder permission edits and moves cannot overwrite a stale snapshot. Migration `0002_collection_revisions.sql` is required.
-- Enforce the folder count limit inside the insert statement.
-- Prevent upload cancellation from deleting a file while completion is in progress.
-- Correct collection sidebar navigation and retain upload destination throughout transfer.
-- Add static-asset security headers and GitHub Actions checks.
-
-### Verification status
-
-- All 15 in-process tests pass with SQLite and an R2 test double; includes concurrency, isolation, cleanup failures, body limits and throttling.
-- Wrangler dry-run build passes.
-- Cloudflare emulator and desktop/mobile browser workflows pass. Remote authentication, folders and security headers pass on isolated staging; real Worker-streamed R2 transfers, scoped links and the cleanup handler pass. See ACCEPTANCE.md for the validation scope.
-- Clean locked dependency installation and audit pass with zero reported vulnerabilities.
-- Fixed the ETag-length bound exposed by real emulator multipart uploads.
-- The Deploy button targets the intended `momardia54/folvio` repository; publication and fresh-account installation are not verified.
+First version: collections with folder trees and permissions, recipient links, folder links, streamed multipart uploads, API keys.

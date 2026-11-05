@@ -1,6 +1,6 @@
 # Roadmap
 
-Folvio is a single-admin file collection app for freelancers, agencies and small teams. Current version: **0.1.0, unreleased**. It targets Cloudflare's free allowances for modest usage.
+Folvio is a single-admin file collection app for freelancers, agencies and small teams. Current version: **0.2.0, unreleased**. It targets Cloudflare's free allowances for modest usage.
 
 This is a plan, not a promise. Order may change.
 
@@ -23,16 +23,24 @@ This is a plan, not a promise. Order may change.
 - [x] File listing, administrator downloads and deletion.
 - [x] API documentation and free-tier deployment guidance.
 
+## 0.2.0: rebuild on Warden's stack
+
+- [x] React Router 7 dashboard with Warden's UI kit, ⌘K search, themes and phone layout.
+- [x] Automatic D1/R2 provisioning on deploy and in-Worker migrations.
+- [x] Image previews, grid/list, collection-wide search, bulk move and delete.
+- [x] Share links usable by programs and AI agents (JSON manifest, one-request upload, folder paths, header credentials).
+- [x] Storage and pending-upload usage on the overview.
+- [x] Per-part retry on dropped connections.
+
 ## Before the first release
 
 - [ ] Publish the source repository and verify the Deploy button target.
-- [x] Implement automatic D1/R2 provisioning and migrations in the CLI deployment command.
+- [x] Automatic D1/R2 provisioning by Wrangler and migrations by the Worker.
 - [ ] Validate a fresh install, including runtime secrets, automatic resource provisioning and lifecycle setup.
 - [ ] Exercise the complete acceptance checklist on real Workers Free, D1 and R2.
-- [x] Verify browser uploads over 100 MB, directory isolation and incorrect part lengths.
-- [x] Verify abandoned multipart cleanup and quota release on real storage.
+- [ ] Re-verify 0.2.0 on real R2: uploads over 100 MB, folder-link isolation, incorrect part lengths, abandoned-upload clean-up (0.1.0 passed these on staging; 0.2.0 is verified locally).
 - [ ] Run more production failure-injection tests around interrupted completion.
-- [x] Sample staging Worker CPU: p99 9.409 ms; zero Worker errors.
+- [ ] Sample 0.2.0 Worker CPU on a real account (0.1.0: p99 9.4 ms).
 - [ ] Validate a larger workload and account-wide usage over time.
 - [x] Check desktop/mobile workflows in Chrome and capture README screenshots.
 - [ ] Complete a keyboard and assistive-technology accessibility review.
@@ -43,13 +51,13 @@ This is a plan, not a promise. Order may change.
 ## Next: reliability and administration
 
 - [ ] Downloadable metadata export and a documented, tested backup/restore workflow.
-- [ ] Storage and pending-upload usage meter in the dashboard.
-- [ ] Upload retry/resume controls and clearer recovery for interrupted transfers.
+- [ ] Resume an interrupted upload after a page reload.
 - [x] In-process concurrency and failure-injection coverage for reservations, revisions, completion/cancellation and cleanup.
 - [ ] Verify those failure scenarios against the Cloudflare runtime and real R2.
 - [ ] Machine-readable OpenAPI specification checked against the implementation.
 - [ ] Scoped API keys for integrations that do not need full administrator access.
-- [x] Search loaded files and move/delete selected files using bounded sequential requests.
+- [ ] ZIP download of a folder (outside the Worker's CPU budget today; needs a streaming approach).
+- [ ] E-mail or webhook notification when files arrive.
 
 ## Towards 1.0
 

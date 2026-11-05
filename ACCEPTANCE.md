@@ -1,34 +1,32 @@
 # Acceptance results
 
-Verified on 2026-11-04 using Node 22, Chrome, Miniflare and an isolated Cloudflare deployment.
+## 0.2.0, verified on 2026-11-05
 
-## Passing checks
+Run locally with Node 22, Chromium (Playwright) and the Cloudflare Workers runtime through the Cloudflare Vite plugin, with emulated D1 and R2. Not yet run on a real Cloudflare account.
 
-- Clean independent `npm ci`; dependency audit reports zero vulnerabilities.
-- Production bundle builds; 15 in-process security/API/hardening tests pass.
-- Cloudflare-emulator test passes with real local D1/R2, including streaming a part through the Worker.
-- Chrome desktop (1440 px) and mobile (390 px) tests pass without horizontal overflow or page errors.
-- Browser coverage: login, collection wizard, nested folders, rename/move/delete, recipient folder creation default/toggle, directory-scoped link, actual upload, file display/rename/move, theme switching, API-key creation/revocation and collection navigation.
-- Live D1 migrations, authentication, collection/folder permissions and static security headers pass.
-- Actual Chrome → Worker → R2 uploads pass: UI upload, 13-byte file and 105 MiB multipart file. Incorrect part sizes are rejected. Completion verifies size; files appear in the correct folder. Authenticated downloads and deletion pass.
-- Directory links cannot list or upload into sibling folders, cannot disclose the collection-wide token, and stop working after revocation. Covered locally and on staging.
-- The actual cleanup handler aborts an abandoned multipart upload and releases its D1 reservation against real D1/R2. A staging-only authenticated wrapper invoked the same handler; waiting for the hourly scheduler itself was not part of this test.
-- The CLI deployment script was exercised against the staging resources: resource lookup, migrations, lifecycle configuration and deploy passed.
+### Passing checks
 
-## CPU sample
+- `npm run typecheck`, `npm run build` and `npm test` (13 tests: migrations, permissions, collections, folders, uploads, passwords, folder links, admin API, links used by programs, clean-up), on SQLite with an R2 stand-in.
+- `wrangler deploy --dry-run`: bindings `DB` and `FILES` without ids or names (provisioned on deploy), cron trigger, 348 KB gzipped.
+- A fresh local database is created and migrated by the Worker on its first request (no `wrangler d1 migrations apply`), including the trigger statements of 0002.
+- A 22-step browser run passed against both the development server and the production build (`vite preview`, real CSP with nonces), on a clean database each time:
+  - login (wrong and right password); five-step wizard with a folder template; the review step;
+  - admin uploads into nested folders, including a 40 MiB file sent in 3 parts; download returns the full 41,943,040 bytes;
+  - rename, move, collection-wide search; hide a folder; deny uploads and allow subfolders on another; create and delete a folder;
+  - folder link creation; the recipient page: hidden folder absent, admin files invisible, upload into a permitted folder, read-only folder refused (UI and API 403), subfolder creation where allowed, admin API refused (401);
+  - folder link limited to its folder (siblings absent), upload through it;
+  - password set: recipients signed out, wrong password refused, right password accepted;
+  - API key created and used; invalid key refused (401); collections created through the API;
+  - overview, collections list, ⌘K search, dark theme, phone width without horizontal scrolling; revoked folder link answers 404.
+- Links used by programs, with `curl` against the production build: JSON manifest from `/s/<token>` with `Accept: application/json`; `Link` header on the HTML page; a 40 MiB file uploaded in one `PUT` into `Branding/Logos` by path; `X-Folvio-Recipient` issued once and accepted; another program sees none of those files; a missing file name is explained.
 
-Cloudflare analytics reported 131 successful requests with zero Worker errors: CPU p50 **3.258 ms**, p99 **9.409 ms**. Two intentionally interrupted download requests were classified as clientDisconnected, with zero Worker errors. These measurements include the staged upload workflows but are a small sample, not a load/capacity guarantee. Account subscription inspection was denied by the OAuth scope, so this does not independently certify the account's billing plan. The implementation uses no essential paid-only feature.
+### Not yet verified
 
-## Test isolation and cleanup
+- A deploy to a real account with the Deploy button and with `npm run deploy` (automatic D1/R2 creation, secrets, first-request migrations on real D1).
+- Real R2 behaviour: files above 100 MB, the hourly clean-up on a real cron, a lifecycle rule.
+- Worker CPU time on the free plan under real traffic.
+- A keyboard and screen-reader review.
 
-The Worker, D1 database and R2 bucket used the isolated name `folvio-verify-20261104` in the Development account. They were deleted after testing. Existing Warden/imghost resources were not changed. No administrator or storage credentials were saved in source or test artifacts.
+## 0.1.0, verified on 2026-11-04
 
-The current architecture streams files through the Worker's R2 binding. S3 API credentials, presigned upload URLs and bucket CORS are no longer needed.
-
-## Release work remaining
-
-- Publish the repository, enable private vulnerability reporting and run the configured GitHub Actions workflow.
-- Verify the Deploy button from that published repository on a fresh account. The CLI provisioning path is implemented; a fresh-account click-through is not claimed.
-- Perform a broader accessibility/security review and longer workload testing if using this beyond modest personal/team workloads.
-
-`tests/staging/worker.js` is verification-only. Production `wrangler.jsonc` points directly to `src/index.js` and does not expose the cleanup-test endpoint. To repeat staging tests, create an isolated staging config/resources, set FOLVIO_STAGING_ORIGIN if needed, and run `npm run test:staging`. The script creates ephemeral test login secrets, exercises transfers and removes uploaded test objects; resource deletion follows separately.
+The 0.1.0 code (now replaced) passed real browser → Worker → R2 uploads up to 105 MiB on an isolated staging account, folder-link isolation, abandoned-upload clean-up on real D1/R2 and a CPU sample of p50 3.3 ms, p99 9.4 ms. The upload protocol of 0.2.0 keeps the same design (16 MiB parts streamed into the R2 binding, exact lengths, size check on completion).

@@ -1,43 +1,55 @@
 # Architecture and costs
 
-Reviewed against Cloudflare documentation on 2026-11-04. Allowances are account-wide and can change.
+Allowances reviewed against Cloudflare's documentation in November 2026. They are account-wide and can change.
 
-| Service | Free allowance / constraint | Folvio use |
-|---|---|---|
-| Workers Free | 100,000 requests/day, 10 ms CPU per invocation, 128 MB memory, 50 subrequests | Small JSON authorization and metadata operations; static frontend assets; one hourly cron |
-| D1 Free | 5 million rows read/day, 100,000 rows written/day, 5 GB account storage; 500 MB maximum per database | Indexed metadata, sessions and keys; no binary data |
-| R2 Standard | 10 GB-month storage, 1 million Class A and 10 million Class B operations/month; free Internet egress | Private file objects and multipart parts |
+## How it is built
 
-Sources: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
+One Cloudflare Worker serves everything, like [Warden](https://github.com/momardia54/Warden):
 
-Workers/D1 free limits can stop requests when exhausted. R2 is metered beyond its allowance; its free allowance is **not a billing cap**. Standard storage is required: Infrequent Access has different fees and no equivalent free allowance. Billing activation/payment details can be required for R2. A paid Workers subscription, Queues, Durable Objects, external authentication or email service is not needed.
+```text
+request ─► workers/app.ts
+            ├─ ensureMigrated(DB)        bundled migrations, applied on the first request of an isolate
+            ├─ /api/v1/...               REST API: admin (API key or login cookie) and share links
+            ├─ /s/<token> + Accept: json the link's JSON manifest (for programs and AI agents)
+            └─ everything else           React Router 7 (SSR): dashboard, recipient page, login
+scheduled (hourly) ─► cleanup(): abandoned uploads, expired sessions and throttling records
+```
 
-## Upload safety and quota accounting
+- **React Router 7 with server rendering** on Workers, Tailwind 4 and shadcn/ui. Pages load their data in loaders and change it in actions; the browser only calls the API to upload, download and page through files.
+- **D1** holds collections, folders, upload records, sessions, throttling and API keys. **R2** holds file contents under `uploads/<collection>/<upload>`.
+- **Automatic provisioning.** `wrangler.jsonc` has no `database_id` and no `bucket_name`: on deploy (CLI, Deploy button or connected repository) Wrangler creates `<worker-name>-db` and a bucket and keeps reusing them. The optional `DB_SUFFIX` build variable renames the database (`scripts/set-database-suffix.mjs` patches the generated config).
+- **Self-migrating database.** Migrations are bundled into the Worker and applied on the first request, with Wrangler's `d1_migrations` bookkeeping, so dashboard installs (which never run `wrangler d1 migrations apply`) stay up to date and both ways stay compatible. Trigger bodies are kept whole when splitting statements.
+- **Previews** of pull requests run without a database (Cloudflare never gives them production's) and show a notice.
 
-The browser uploads through Folvio's Worker using its native R2 binding. JSON bodies are limited to 32 KB, while binary multipart bodies are limited to 16 MiB. Each binary request is streamed directly to R2 without calling arrayBuffer(), text() or formData() on file contents. Parts stay below Cloudflare Free's 100 MB request-body limit. Files up to 2 GB are split into sequential parts; upload reservations last one hour.
+## Uploads
 
-A single SQLite INSERT…SELECT atomically checks collection and installation usage before reserving bytes. Pending uploads count toward quota. Each part request authenticates the caller and checks ownership, folder permissions, expiration, part number and exact Content-Length. R2 consumes the fixed-length HTTP stream; completion verifies the final stored size. Permission revocation blocks subsequent parts and completion. In-flight requests may already be transferring.
+```text
+browser / program ──PUT 16 MiB part──► Worker ──uploadPart(stream)──► R2 multipart upload
+                  ──PUT whole file (≤95 MB)──► Worker ──put(stream)──► R2 object
+```
 
-Hourly cleanup handles at most five expired uploads per invocation, after a ten-minute grace period, plus bounded expired authentication records. The deployment script adds a one-day abort-incomplete-multipart lifecycle fallback. Downloads stream from R2 through an authenticated administrator endpoint. No S3 credentials, public bucket, or cross-origin browser upload setup is required.
+1. **Reserve.** One `INSERT … SELECT` checks the collection's quota and the installation's `STORAGE_LIMIT_BYTES`, counting uploads in progress, and records the reservation (one hour).
+2. **Send.** Each part request is authenticated and checked again: link or key, folder permissions (revoking stops the next part), ownership of the reservation, expiry, part number and exact `Content-Length`. The fixed-length body is handed to R2 as a stream: file contents are never buffered in JavaScript.
+3. **Complete.** The parts list is checked, R2 completes the object, and its stored size must equal the reserved size or everything is deleted.
 
-See [R2 Workers multipart API](https://developers.cloudflare.com/r2/api/workers/workers-multipart-usage/) and [lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/).
+Parts stay far below the 100 MB request body limit of the free plan. Files up to 2 GB (`max_file`) are supported. No S3 credentials, presigned URLs, public bucket or CORS rules are needed. Downloads stream from R2 through the Worker, for the administrator only.
+
+The hourly clean-up aborts at most five expired reservations per run (ten minutes after expiry) and deletes expired sessions and throttling records in bounded batches. D1 and R2 do not share transactions, so an interrupted request can leave a reservation; the clean-up releases it. An R2 lifecycle rule aborting incomplete multipart uploads after a day is a good extra safety net.
+
+## Free allowances
+
+| Service | Free allowance | Folvio's use |
+| --- | --- | --- |
+| Workers Free | 100,000 requests/day, 10 ms CPU per request, 128 MB memory | Pages, JSON, one request per 16 MiB part; one cron trigger |
+| D1 Free | 5M rows read/day, 100,000 rows written/day, 5 GB storage (500 MB per database) | Metadata only, indexed |
+| R2 Standard | 10 GB-month, 1M Class A and 10M Class B operations/month, free egress | File contents; about one Class A operation per part |
+
+R2's allowance is **not a spending cap**: storage or operations beyond it are billed, and R2 needs a payment method to be activated. Folvio's 8 GB default limit is an application limit; lower `STORAGE_LIMIT_BYTES` when the account has other buckets. Infrequent Access storage is not used (it has no equivalent free allowance).
+
+Sources: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 multipart from Workers](https://developers.cloudflare.com/r2/api/workers/workers-multipart-usage/).
 
 ## Practical capacity
 
-Defaults: 8 GB installation quota, 1 GB per collection, 100 MB per file, 200 folders per collection, fewer than 20 hierarchy levels. Empty files are rejected. File and collection lists use 50-record cursor pages with a 51st lookahead record. Folder trees are bounded to 200 entries. Quota totals use indexed metadata scans; this design targets modest collections rather than millions of file records. No content transforms, virus scans, ZIP generation, server-side rendering or per-file background polling run inside Workers.
+Defaults: 8 GB per installation, 1 GB per collection, 100 MB per file; 200 folders per collection, 20 levels. File lists page 100 at a time, newest first. Quota totals use indexed scans of upload records: the design targets modest collections (thousands of files), not millions. Nothing heavy runs in the Worker: no thumbnails, ZIP files, virus scans or transcoding. Image previews stream the original file (raster images up to 10 MB).
 
-An 8 GB application quota leaves some room under R2's allowance, but other buckets, multipart retention, and account-wide usage may consume that room. Lower STORAGE_LIMIT_BYTES when sharing an account. Authenticated retries consume Worker requests and R2 operations even though stored bytes remain bounded. There is no absolute R2 spending guarantee.
-
-Monitor Workers requests/CPU/errors, D1 rows read/written/storage, and R2 storage/Class A/Class B metrics in Cloudflare. Set available usage/billing notifications. Use a dedicated private bucket, short expiration dates and collection passwords for sensitive links. Delete collected files when no longer needed. Revoke unused API keys. Avoid public distribution of collection links and avoid unauthenticated third-party hotlinking. Stop uploads by setting collection upload permission off (also deny any folder overrides). Folder-specific links can be revoked independently.
-
-## Security boundaries
-
-One administrator per installation. API keys grant full admin access and are stored only as hashes. Cookies are HttpOnly, SameSite=Strict and Secure on HTTPS. Recipient identity is a signed random browser cookie tied to the collection password; changing that password invalidates recipient access cookies. Losing a cookie loses own-folder rename rights and the recipient's file listing; the administrator retains access. Recipient cookies last seven days; collection expiration is checked on every request.
-
-Collection passwords use a server-secret HMAC, avoiding expensive password derivation in the 10 ms CPU budget. Protect the session secret and use strong collection passwords. Login/unlock attempts have a D1-backed fixed-window limit. D1 and R2 are not transactionally coupled; interrupted uploads retain reservations and are cleaned later. Files download as authenticated attachments. Admin-only previews support small raster formats with explicit image types; HTML and SVG are not previewed. No antivirus scanning is performed.
-
-A real 105 MiB transfer through the Worker has passed staging verification. CPU measurements and validation scope are recorded in ACCEPTANCE.md; a small sample does not guarantee capacity for arbitrary traffic.
-
-## File management and directory links
-
-The administrator can rename and move completed files without rewriting their object contents. Grid/list views, previews, search of loaded pages and selected-file operations use the same authenticated API. Selected-file operations run sequentially to keep requests bounded. Folder-specific links have their own random tokens and are restricted server-side to that directory tree. The parent collection token is never returned to a scoped recipient.
+Monitor Workers requests and errors, D1 reads/writes and R2 storage and operations in the Cloudflare dashboard, and set billing notifications. Delete collections you no longer need: their files go with them.
