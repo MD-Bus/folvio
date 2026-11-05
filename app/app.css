@@ -131,6 +131,8 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    /* A long word (a file name, a pasted link) breaks instead of running out of its box. */
+    overflow-wrap: break-word;
   }
 }
 

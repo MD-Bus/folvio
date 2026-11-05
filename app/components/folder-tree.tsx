@@ -49,7 +49,9 @@ export function FolderTree({
           )}
           <Link to={href(node.id)} preventScrollReset className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2" aria-current={active ? "page" : undefined}>
             {active ? <FolderOpen className="size-4 shrink-0 text-muted-foreground" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />}
-            <span className="truncate">{node.name}</span>
+            <span className="truncate" title={node.name}>
+              {node.name}
+            </span>
             {showFlags && node.hidden ? <EyeOff className="size-3.5 shrink-0 text-muted-foreground" aria-label="Hidden from recipients" /> : null}
             {showFlags && node.permissions && !node.permissions.upload && !node.permissions.hidden ? <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Uploads closed" /> : null}
             {count ? <span className="ml-auto text-xs text-muted-foreground tabular-nums">{count}</span> : null}
@@ -71,7 +73,9 @@ export function FolderTree({
             aria-current={current === null ? "page" : undefined}
           >
             <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">{rootLabel}</span>
+            <span className="truncate" title={rootLabel}>
+              {rootLabel}
+            </span>
             {counts?.[""]?.files ? <span className="ml-auto text-xs text-muted-foreground tabular-nums">{counts[""].files}</span> : null}
           </Link>
         </li>

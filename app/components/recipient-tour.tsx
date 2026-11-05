@@ -42,7 +42,7 @@ export function RecipientTour({
       body: (
         <>
           <p>You were invited to send files here. It takes a minute and needs no account.</p>
-          {description && <p className="rounded-md border bg-muted/50 p-3 whitespace-pre-line text-foreground">{description}</p>}
+          {description && <p className="max-h-48 overflow-y-auto rounded-md border bg-muted/50 p-3 whitespace-pre-line text-foreground">{description}</p>}
         </>
       ),
     },
@@ -97,17 +97,17 @@ export function RecipientTour({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : finish())}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md" showCloseButton={false}>
-        <div className="flex flex-col items-center gap-3 bg-muted/50 px-6 pt-8 pb-6 text-center">
+      <DialogContent className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md" showCloseButton={false}>
+        <div className="flex shrink-0 flex-col items-center gap-3 bg-muted/50 px-6 pt-8 pb-6 text-center">
           <span className="flex size-12 items-center justify-center rounded-xl bg-background shadow-sm ring-1 ring-border">
             <current.icon className="size-5" />
           </span>
-          <DialogTitle className="text-lg">{current.title}</DialogTitle>
+          <DialogTitle className="text-lg [overflow-wrap:anywhere]">{current.title}</DialogTitle>
         </div>
         <DialogDescription asChild>
-          <div className="space-y-3 px-6 py-5 text-sm leading-relaxed text-muted-foreground">{current.body}</div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-5 text-sm leading-relaxed [overflow-wrap:anywhere] text-muted-foreground">{current.body}</div>
         </DialogDescription>
-        <div className="flex items-center justify-between gap-2 border-t px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t px-6 py-4">
           <div className="flex gap-1.5" aria-label={`Step ${step + 1} of ${steps.length}`}>
             {steps.map((_, i) => (
               <span key={i} className={cn("h-1.5 rounded-full transition-all", i === step ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30")} />

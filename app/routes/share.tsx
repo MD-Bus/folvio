@@ -220,7 +220,9 @@ function FolderMenu({ d, href }: { d: OpenData; href: (id: string | null) => str
               )}
               <Link to={href(f.id)} preventScrollReset aria-current={d.folder === f.id ? "page" : undefined} className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-sm">
                 {d.folder === f.id ? <FolderOpen className="size-4 shrink-0 text-muted-foreground" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />}
-                <span className={cn("truncate", d.folder === f.id && "font-medium")}>{f.name}</span>
+                <span className={cn("truncate", d.folder === f.id && "font-medium")} title={f.name}>
+                  {f.name}
+                </span>
                 {!f.permissions.upload && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="View only" />}
                 {(d.counts[f.id]?.total ?? 0) > 0 && <span className="ml-auto text-xs text-muted-foreground tabular-nums">{d.counts[f.id].total}</span>}
               </Link>
@@ -245,7 +247,9 @@ function FolderMenu({ d, href }: { d: OpenData; href: (id: string | null) => str
             className={cn("flex items-center gap-2 rounded-md px-2 py-1.5 text-sm", d.folder === null ? "bg-accent font-medium text-accent-foreground" : "hover:bg-accent/60")}
           >
             <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">{d.name}</span>
+            <span className="truncate" title={d.name}>
+              {d.name}
+            </span>
             {!d.permissionsTop.upload && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="View only" />}
             {rootTotal > 0 && <span className="ml-auto text-xs text-muted-foreground tabular-nums">{rootTotal}</span>}
           </Link>
@@ -294,10 +298,10 @@ function Open({ data: d }: { data: OpenData }) {
       <div className="space-y-6">
         <section className="rounded-xl border bg-card p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{d.name}</h1>
+            <h1 className="min-w-0 text-2xl font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-3xl">{d.name}</h1>
             {d.scoped && <Badge variant="secondary">Folder of {d.collectionName}</Badge>}
           </div>
-          {d.description && <p className="mt-2 max-w-3xl whitespace-pre-line text-muted-foreground">{d.description}</p>}
+          {d.description && <p className="mt-2 max-w-3xl whitespace-pre-line [overflow-wrap:anywhere] text-muted-foreground">{d.description}</p>}
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             <span className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground">
               <Upload className="size-3" /> Up to {formatBytes(d.maxFile)} per file
@@ -323,8 +327,8 @@ function Open({ data: d }: { data: OpenData }) {
           <section className="min-w-0 space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-                  <Link to={href(null)} className="hover:text-foreground">
+                <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm [overflow-wrap:anywhere] text-muted-foreground">
+                  <Link to={href(null)} className="min-w-0 hover:text-foreground">
                     {d.name}
                   </Link>
                   {trail.map((f, i) => (
@@ -340,7 +344,7 @@ function Open({ data: d }: { data: OpenData }) {
                     </span>
                   ))}
                 </div>
-                <Badge variant={d.here.upload ? "success" : "secondary"}>
+                <Badge variant={d.here.upload ? "success" : "secondary"} className="max-w-full justify-start text-left whitespace-normal [overflow-wrap:anywhere]">
                   {d.here.upload ? <Upload /> : <Lock />}
                   {d.here.upload ? `You can upload to ${here}` : `${here} is view only`}
                 </Badge>
@@ -361,7 +365,7 @@ function Open({ data: d }: { data: OpenData }) {
 
             {subfolders.length > 0 && (
               <div className="space-y-2">
-                <h2 className="text-sm font-medium text-muted-foreground">{d.folder ? `Folders in ${here}` : "Folders"}</h2>
+                <h2 className="truncate text-sm font-medium text-muted-foreground" title={here}>{d.folder ? `Folders in ${here}` : "Folders"}</h2>
                 <FolderCards folders={subfolders} counts={d.counts} href={(id) => href(id)} audience="recipient" />
               </div>
             )}
@@ -380,8 +384,8 @@ function Open({ data: d }: { data: OpenData }) {
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold">{d.showFiles ? `Files in ${here}` : `Your files in ${here}`}</h2>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold [overflow-wrap:anywhere]">{d.showFiles ? `Files in ${here}` : `Your files in ${here}`}</h2>
                   <p className="text-xs text-muted-foreground">{d.files.length ? `${d.files.length}${d.more ? "+" : ""} file${d.files.length === 1 ? "" : "s"}, subfolders included` : ""}</p>
                 </div>
                 {d.files.length > 0 && <ViewControls {...fileView} />}
@@ -421,7 +425,9 @@ function RecipientFiles({ files, base, placeOf, showFiles, view }: { files: RFil
                 {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon name={f.name} className="size-4 text-muted-foreground" />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{f.name}</span>
+                <span className="block truncate font-medium" title={f.name}>
+                  {f.name}
+                </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {placeOf(f.folder) ? `in ${placeOf(f.folder)} · ` : ""}
                   {showFiles && f.own ? "sent by you" : <Ago ts={f.created} />}

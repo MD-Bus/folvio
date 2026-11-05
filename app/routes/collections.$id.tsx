@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { data, Form, Link, redirect, useFetcher, useNavigation, useRevalidator, useSearchParams } from "react-router"
-import { EyeOff, FolderCog, FolderPlus, KeyRound, Link2, Plus, Search, Settings2, Share2, Trash2, X } from "lucide-react"
+import { EyeOff, Folder, FolderCog, FolderPlus, KeyRound, Link2, Plus, Search, Settings2, Share2, Trash2, X } from "lucide-react"
 import type { Route } from "./+types/collections.$id"
 import { AgentHelp } from "#/components/agent-help"
 import { CollectionStateBadge } from "#/components/collection-state"
@@ -292,7 +292,7 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q, scope
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             {q ? (
-              <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold [overflow-wrap:anywhere]">
                 Search results for &ldquo;{q}&rdquo;
                 <Button variant="ghost" size="sm" asChild>
                   <Link to={href(folder)}>
@@ -302,8 +302,8 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q, scope
               </h2>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-                  <Link to={href(null)} className="hover:text-foreground">
+                <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm [overflow-wrap:anywhere] text-muted-foreground">
+                  <Link to={href(null)} className="min-w-0 hover:text-foreground">
                     {c.name}
                   </Link>
                   {trail.map((f, i) => (
@@ -447,36 +447,28 @@ function LinksTab({ collection: c, folders, links, origin }: Pick<Data, "folders
         {links.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{folders.length === 0 ? "Create folders first: a folder link shares one of them." : "No folder links yet."}</div>
         ) : (
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Folder</TableHead>
-                  <TableHead>Link</TableHead>
-                  <TableHead className="hidden md:table-cell">Created</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {links.map((l) => (
-                  <TableRow key={l.token}>
-                    <TableCell className="max-w-[12rem] truncate font-medium">{folderPath(folders, l.folder) || "Deleted folder"}</TableCell>
-                    <TableCell className="min-w-[16rem]">
-                      <CopyLink url={`${origin}/s/${l.token}`} label={`Link to ${folderPath(folders, l.folder)}`} />
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground md:table-cell">
-                      <Ago ts={l.created} />
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" aria-label="Revoke link" onClick={() => revoke.submit({ intent: "revoke_link", token: l.token }, { method: "post" })}>
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <ul className="divide-y rounded-lg border bg-card">
+            {links.map((l) => {
+              const path = folderPath(folders, l.folder) || "Deleted folder"
+              return (
+                <li key={l.token} className="space-y-2 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Folder className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium" title={path}>
+                      {path}
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                      Created <Ago ts={l.created} />
+                    </span>
+                    <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground hover:text-destructive" aria-label="Revoke link" onClick={() => revoke.submit({ intent: "revoke_link", token: l.token }, { method: "post" })}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <CopyLink url={`${origin}/s/${l.token}`} label={`Link to ${folderPath(folders, l.folder)}`} />
+                </li>
+              )
+            })}
+          </ul>
         )}
       </section>
 

@@ -32,7 +32,9 @@ export function FolderCards({
                   <Folder className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{f.name}</span>
+                  <span className="block truncate text-sm font-medium" title={f.name}>
+                    {f.name}
+                  </span>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     {total === 0 ? "Empty" : `${total.toLocaleString("en-GB")} file${total === 1 ? "" : "s"}`}
                     {audience === "admin" && f.hidden ? (

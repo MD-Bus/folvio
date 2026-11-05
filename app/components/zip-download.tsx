@@ -55,6 +55,14 @@ export function ZipDownloadButton({ apiBase, folder, label, size = "sm", variant
       const zip = new ZipWriter(sink)
       let doneFiles = 0
       let doneBytes = 0
+      // Progress is drawn at most every 150 ms: updating on every chunk made the dialog flicker.
+      let drawn = 0
+      const draw = (force = false) => {
+        const now = performance.now()
+        if (!force && now - drawn < 150) return
+        drawn = now
+        setState((s) => s && { ...s, doneBytes, doneFiles })
+      }
       for (const entry of manifest.entries) {
         if (controller.signal.aborted) throw new DOMException("Cancelled", "AbortError")
         const at = entry.created ? new Date(entry.created) : new Date()
@@ -67,10 +75,10 @@ export function ZipDownloadButton({ apiBase, folder, label, size = "sm", variant
         if (!file.ok || !file.body) throw new Error(`${entry.path} could not be downloaded (${file.status}).`)
         await zip.addFile(entry.path, file.body, at, (n) => {
           doneBytes += n
-          setState((s) => s && { ...s, doneBytes })
+          draw()
         })
         doneFiles++
-        setState((s) => s && { ...s, doneFiles })
+        draw(true)
       }
       setState((s) => s && { ...s, phase: "saving", current: undefined })
       await zip.finish()
@@ -104,7 +112,7 @@ export function ZipDownloadButton({ apiBase, folder, label, size = "sm", variant
       <Dialog open={state !== null} onOpenChange={(open) => !open && (busy ? abort.current?.abort() : setState(null))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{state?.phase === "done" ? "ZIP ready" : `ZIP of ${state?.name ?? label}`}</DialogTitle>
+            <DialogTitle className="[overflow-wrap:anywhere]">{state?.phase === "done" ? "ZIP ready" : `ZIP of ${state?.name ?? label}`}</DialogTitle>
             <DialogDescription>
               {state?.phase === "listing" && "Listing the files..."}
               {state?.phase === "zipping" && "Your browser is building the archive with every subfolder. Keep this tab open."}
@@ -115,9 +123,9 @@ export function ZipDownloadButton({ apiBase, folder, label, size = "sm", variant
             </DialogDescription>
           </DialogHeader>
           {state && (state.phase === "zipping" || state.phase === "saving") && (
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full bg-primary transition-[width] duration-150 ease-linear" style={{ width: `${pct}%` }} />
               </div>
               <div className="flex justify-between gap-3 text-xs text-muted-foreground tabular-nums">
                 <span>
@@ -127,12 +135,15 @@ export function ZipDownloadButton({ apiBase, folder, label, size = "sm", variant
                   {formatBytes(state.doneBytes)} of {formatBytes(state.bytes)}
                 </span>
               </div>
-              {state.current && (
-                <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-                  <Loader2 className="size-3 shrink-0 animate-spin" />
-                  <span className="truncate">{state.current}</span>
-                </p>
-              )}
+              <p className="flex h-4 min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={state.current}>
+                {state.current && (
+                  <>
+                    <Loader2 className="size-3 shrink-0 animate-spin" />
+                    <span className="min-w-0 truncate">{state.current.split("/").pop()}</span>
+                  </>
+                )}
+                {state.phase === "saving" && "Saving..."}
+              </p>
             </div>
           )}
           <DialogFooter>
