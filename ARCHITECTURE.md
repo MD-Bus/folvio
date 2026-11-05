@@ -17,7 +17,7 @@ scheduled (hourly) ─► cleanup(): abandoned uploads, expired sessions and thr
 
 - **React Router 7 with server rendering** on Workers, Tailwind 4 and shadcn/ui. Pages load their data in loaders and change it in actions; the browser only calls the API to upload, download and page through files.
 - **D1** holds collections, folders, upload records, sessions, throttling and API keys. **R2** holds file contents under `uploads/<collection>/<upload>`.
-- **Automatic provisioning.** `wrangler.jsonc` has no `database_id` and no `bucket_name`: on deploy (CLI, Deploy button or connected repository) Wrangler creates `<worker-name>-db` and a bucket and keeps reusing them. The optional `DB_SUFFIX` build variable renames the database (`scripts/set-database-suffix.mjs` patches the generated config).
+- **Automatic provisioning.** `wrangler.jsonc` names the database (`folvio-db`) and the bucket (`folvio-files`) without ids: on deploy (CLI, Deploy button or connected repository) Wrangler reuses them when they exist and creates them otherwise. A name-less binding would always be created anew and fail when an earlier install left a resource with the default name. The optional `DB_SUFFIX` build variable renames the database (`scripts/set-database-suffix.mjs` patches the generated config).
 - **Self-migrating database.** Migrations are bundled into the Worker and applied on the first request, with Wrangler's `d1_migrations` bookkeeping, so dashboard installs (which never run `wrangler d1 migrations apply`) stay up to date and both ways stay compatible. Trigger bodies are kept whole when splitting statements.
 - **Previews** of pull requests run without a database (Cloudflare never gives them production's) and show a notice.
 

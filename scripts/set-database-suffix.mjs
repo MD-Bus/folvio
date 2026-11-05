@@ -47,7 +47,7 @@ function locateGeneratedConfig(root) {
 function main() {
   const raw = process.env.DB_SUFFIX
   if (!(raw ?? "").trim()) {
-    console.log("[folvio] DB_SUFFIX is not set: the database will be named <worker-name>-db.")
+    console.log("[folvio] DB_SUFFIX is not set: the database keeps the name from wrangler.jsonc (folvio-db).")
     return
   }
   const file = locateGeneratedConfig(process.cwd())

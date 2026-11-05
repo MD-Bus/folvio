@@ -7,18 +7,20 @@
 	"observability": { "enabled": true },
 	// Smart Placement: Cloudflare may run the Worker close to the database instead of close to the visitor.
 	"placement": { "mode": "smart" },
-	// No database_name / database_id on purpose. On deploy Wrangler creates a database named
-	// "<worker-name>-db" and keeps reusing it. Worker names are unique per account, so two installs never
-	// share a database. The tables are created and upgraded by the Worker itself on the first request.
+	// No database_id on purpose: on deploy Wrangler reuses the database named "folvio-db" if the account has one
+	// (for example from an earlier install) and creates it otherwise. Nothing to fill in. The tables are created and
+	// upgraded by the Worker itself on the first request. For a second install on the same account, change the name
+	// (or set the DB_SUFFIX build variable) so the two never share data.
 	"d1_databases": [
 		{
 			"binding": "DB",
+			"database_name": "folvio-db",
 			"migrations_dir": "migrations"
 		}
 	],
-	// The uploaded files. No bucket_name on purpose: like the database, Wrangler creates the bucket on deploy and
-	// keeps reusing it. R2 must be activated once in the Cloudflare dashboard. Keep the bucket private.
-	"r2_buckets": [{ "binding": "FILES" }],
+	// The uploaded files. Like the database: reused if the account already has "folvio-files", created otherwise.
+	// R2 must be activated once in the Cloudflare dashboard. Keep the bucket private. Change the name for a second install.
+	"r2_buckets": [{ "binding": "FILES", "bucket_name": "folvio-files" }],
 	"vars": {
 		// Installation-wide storage limit in bytes (uploads in progress count). Lower it when the account has other buckets.
 		"STORAGE_LIMIT_BYTES": "8000000000"

@@ -38,7 +38,7 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 
 ## Quick start
 
-1. **Deploy** with the button above, or `npm run deploy` (see [Deploy](#deploy)). The Worker, its D1 database, its R2 bucket and the hourly clean-up are created for you; the tables are created on the first request.
+1. **Deploy** with the button above, or `npm run deploy` (see [Deploy](#deploy)). The Worker, its D1 database, its R2 bucket and the hourly clean-up are created (or reused) for you; the tables are created on the first request.
 2. **Add the admin secrets** `ADMIN_USERNAME`, `ADMIN_PASSWORD` and `SESSION_SECRET`. Until they exist, the login page shows exactly what to add and where.
 3. **Create a collection** in five short steps: details, access and limits, folders (start from an example tree or build your own), permissions, review.
 4. **Share the link.** Received files appear in the matching folders, with previews, search and bulk actions.
@@ -112,7 +112,7 @@ The Share dialog has **Copy message for an AI agent**: a ready-made instruction 
 
 ### Deploy button
 
-Click the button at the top. Cloudflare copies the repository to your GitHub account, builds it and deploys it; the D1 database and the R2 bucket are created automatically, named after the Worker. Then add the runtime secrets (below). R2 must be activated once in the Cloudflare dashboard (it asks for a payment method, even for the free allowance); until it is, the dashboard says so.
+Click the button at the top. Cloudflare copies the repository to your GitHub account, builds it and deploys it; the D1 database (`folvio-db`) and the R2 bucket (`folvio-files`) are created automatically, or reused if they exist. Then add the runtime secrets (below). R2 must be activated once in the Cloudflare dashboard (it asks for a payment method, even for the free allowance); until it is, the dashboard says so.
 
 ### Command line
 
@@ -121,13 +121,13 @@ Requirements: Node 22 and a Cloudflare account with R2 activated.
 ```bash
 npm install
 npx wrangler login
-npm run deploy       # builds, creates the D1 database "<worker-name>-db", the R2 bucket and the hourly Cron Trigger, deploys
+npm run deploy       # builds, creates or reuses the D1 database and R2 bucket, adds the hourly Cron Trigger, deploys
 npx wrangler secret put ADMIN_USERNAME
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET     # recommended: openssl rand -hex 32
 ```
 
-Nothing to fill into `wrangler.jsonc`: it has no `database_id` and no `bucket_name` on purpose. On deploy Wrangler creates `<worker-name>-db` and a bucket for the Worker and keeps reusing them, so two installs on one account never share data. The Worker applies its own migrations on the first request, so there is no migration step either (`npm run migrate:remote` remains available as a fallback). Set the optional `DB_SUFFIX` build variable to name the database `<worker-name>-<suffix>` instead.
+Nothing to fill into `wrangler.jsonc`: it names the database `folvio-db` and the bucket `folvio-files` but has no ids. On deploy Wrangler reuses them if the account already has them (an earlier install, a redeploy after deleting the Worker) and creates them otherwise. The Worker applies its own migrations on the first request, so there is no migration step either (`npm run migrate:remote` remains available as a fallback). For a second install on the same account, change both names in `wrangler.jsonc` (or set the `DB_SUFFIX` build variable for the database) so the installs never share data.
 
 **Connected repository (Workers & Pages → Create → Import a repository).** Nothing to enter: keep the commands Cloudflare suggests, even an empty build command. In Workers Builds (`WORKERS_CI=1`) Folvio builds itself right after the dependency install, so the default deploy command `npx wrangler deploy` finds the build. Node 22 is pinned in `.node-version`; the database and the bucket are created on the first deploy.
 
@@ -146,8 +146,8 @@ Use a custom domain (Workers → your Worker → Settings → Domains) so shared
 
 | Binding | Resource | Created by |
 | --- | --- | --- |
-| `DB` | D1 | Wrangler, on deploy (`<worker-name>-db`) |
-| `FILES` | R2 Standard, private | Wrangler, on deploy |
+| `DB` | D1 `folvio-db` | Reused or created by Wrangler on deploy |
+| `FILES` | R2 Standard `folvio-files`, private | Reused or created by Wrangler on deploy |
 
 Add secrets under Worker **Settings → Variables and Secrets** (type *Secret*), not under the build settings. There is no default login and no public registration.
 

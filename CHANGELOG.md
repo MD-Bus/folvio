@@ -13,7 +13,7 @@ A full rebuild on the stack and dashboard of [Warden](https://github.com/momardi
 - File browser: grid with image previews or list, search across the collection, select, move, rename, delete, download; per-folder counts.
 - Upload queue with drag and drop, progress per file, cancel, a retry per part, and a warning before leaving the page.
 - Recipient page: instructions, folders they may use, their own files, password page, expired page, phone layout.
-- Automatic provisioning of D1 and R2 on deploy (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.
+- Automatic provisioning of D1 (`folvio-db`) and R2 (`folvio-files`) on deploy, reusing them when they already exist (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.
 - API keys show when they were created and last used.
 - In Cloudflare Workers Builds the app builds itself after the dependency install, so Workers connected with the 0.1.0 settings (no build command) deploy without changes. Node 22 is pinned in `.node-version`.
 
