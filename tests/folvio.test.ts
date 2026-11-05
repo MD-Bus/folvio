@@ -6,8 +6,8 @@ import { makeBucket, makeCtx, makeDb } from "./helpers/d1.ts"
 import { splitStatements } from "../app/server/migrate.server.ts"
 import { effectivePermissions, validateDraft, type FolderRow } from "../app/lib/folders.ts"
 import { PART_SIZE } from "../app/lib/format.ts"
-import { createCollection, createFolder, deleteCollection, deleteFolder, updateCollection, updateFolder } from "../app/server/collections.server.ts"
-import { cleanup, completeUpload, deleteFiles, initUpload, listFiles, updateFiles, uploadPart } from "../app/server/files.server.ts"
+import { createCollection, createFolder, deleteCollection, deleteFolder, purgeExpired, updateCollection, updateFolder } from "../app/server/collections.server.ts"
+import { cleanup, completeUpload, deleteFiles, folderCounts, getFile, initUpload, listFiles, updateFiles, uploadPart } from "../app/server/files.server.ts"
 import { adminAccess, createLink, openShare, recipientAccess } from "../app/server/share.server.ts"
 import { handleApi } from "../app/server/api.server.ts"
 import { createApiKey } from "../app/server/api-keys.server.ts"
@@ -273,3 +273,63 @@ test("a share link works for programs: manifest, one-request upload by folder pa
 async function findCollectionId(env: Env, token: string): Promise<string> {
   return (await env.DB.prepare("SELECT id FROM collections WHERE token = ?").bind(token).first<{ id: string }>())!.id
 }
+
+test("a folder lists everything inside it; recipients see their own files, or all with show_files", async () => {
+  const { env } = makeEnv()
+  const { id, token } = await createCollection(env, { name: "C" }, [{ id: "a", name: "Images", parent: null }, { id: "b", name: "Team", parent: "a" }, { id: "h", name: "Secret", parent: null }])
+  let admin = await adminAccess(env, id)
+  const [images, team, secret] = ["Images", "Team", "Secret"].map((n) => admin.folders.find((f) => f.name === n)!.id)
+  await updateFolder(env, admin, secret, { hidden: true })
+  admin = await adminAccess(env, id)
+  const put = async (access: Awaited<ReturnType<typeof adminAccess>>, name: string, folder: string | null) => {
+    const up = await initUpload(env, access, { name, size: 1, folder })
+    await completeUpload(env, access, up.id, { parts: [await uploadPart(env, access, up.id, 1, partRequest(new Uint8Array(1)))] })
+    return up.id
+  }
+  const opener = async () => {
+    const { cookie } = await openShare(new Request("https://x.test/"), env, (await adminAccess(env, id)).c, "")
+    return recipientAccess(new Request("https://x.test/", { headers: { cookie: cookie.split(";")[0] } }), env, token)
+  }
+  const alice = await opener()
+  const bob = await opener()
+  await put(admin, "secret.txt", secret)
+  const deep = await put(alice, "deep.png", team)
+  await put(bob, "bob.png", images)
+
+  // the root shows everything inside it
+  assert.equal((await listFiles(env, admin, { folder: null })).files.length, 0, "nothing directly in the root")
+  assert.equal((await listFiles(env, admin, { folder: null, recursive: true })).files.length, 3)
+  assert.deepEqual((await listFiles(env, alice, { folder: null, recursive: true })).files.map((f) => f.name), ["deep.png"])
+  assert.equal(await status(getFile(env, bob, deep)), 404, "bob cannot open alice's file")
+  assert.equal((await getFile(env, alice, deep)).name, "deep.png", "alice can open her own file")
+
+  const counts = await folderCounts(env, admin)
+  assert.deepEqual([counts[""].total, counts[images].total, counts[images].files, counts[team].files], [3, 2, 1, 1])
+
+  // shared collections: everyone sees every visible file, never the hidden folder
+  await updateCollection(env, (await adminAccess(env, id)).c, { show_files: true })
+  const bob2 = await recipientAccess(new Request("https://x.test/", { headers: { cookie: `fv_${id}=${(await openShare(new Request("https://x.test/"), env, (await adminAccess(env, id)).c, "")).recipient}` } }), env, token)
+  assert.deepEqual((await listFiles(env, bob2, { folder: null, recursive: true })).files.map((f) => f.name).sort(), ["bob.png", "deep.png"])
+  assert.equal((await getFile(env, bob2, deep)).name, "deep.png")
+  assert.equal((await folderCounts(env, bob2))[""].total, 2)
+})
+
+test("collections set to auto-delete are removed with their files once expired; others are kept", async () => {
+  const { env, raw, objects } = makeEnv()
+  assert.equal(await status(createCollection(env, { name: "No date", auto_delete: true })), 400, "auto-delete needs an expiry")
+  const gone = await createCollection(env, { name: "Gone", expires: Date.now() + 60_000, auto_delete: true }, [{ id: "a", name: "A", parent: null }])
+  const kept = await createCollection(env, { name: "Kept", expires: Date.now() + 60_000 })
+  for (const id of [gone.id, kept.id]) {
+    const access = await adminAccess(env, id)
+    const up = await initUpload(env, access, { name: "f.txt", size: 2 })
+    await completeUpload(env, access, up.id, { parts: [await uploadPart(env, access, up.id, 1, partRequest(new Uint8Array(2)))] })
+  }
+  await createLink(env, await adminAccess(env, gone.id), (await adminAccess(env, gone.id)).folders[0].id)
+  assert.equal(await purgeExpired(env), 0, "not expired yet")
+  const later = Date.now() + 120_000
+  assert.equal(await purgeExpired(env, later), 1)
+  assert.equal(raw.prepare("SELECT count(*) AS n FROM collections").get()!.n, 1)
+  assert.equal(raw.prepare("SELECT name FROM collections").get()!.name, "Kept")
+  assert.equal(raw.prepare("SELECT count(*) AS n FROM folder_links").get()!.n, 0)
+  assert.equal(objects.size, 1, "only the kept collection's file remains")
+})

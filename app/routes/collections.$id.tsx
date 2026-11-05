@@ -10,6 +10,7 @@ import { Fact, FactStrip } from "#/components/fact-strip"
 import { FileBrowser, FolderSelectOptions } from "#/components/file-browser"
 import { ManageFolderDialog, NewFolderDialog } from "#/components/folder-dialogs"
 import { FolderTree } from "#/components/folder-tree"
+import { FolderCards, ScopeSwitch } from "#/components/folder-cards"
 import { FieldLabel } from "#/components/help-tip"
 import { PageHeader } from "#/components/page-header"
 import { PageTitle } from "#/components/page-title"
@@ -31,7 +32,7 @@ import { formatBytes, plural } from "#/lib/format"
 import { requireAuth } from "~/server/auth.server"
 import { collectionSummary, createFolder, deleteCollection, deleteFolder, regenerateToken, updateCollection, updateFolder, visibleFolders } from "~/server/collections.server"
 import { storageLimit } from "~/server/db.server"
-import { deleteFiles, folderUsage, getFile, listFiles, updateFiles } from "~/server/files.server"
+import { deleteFiles, folderCounts, getFile, listFiles, updateFiles } from "~/server/files.server"
 import { attempt, settingsFromForm, triState } from "~/server/forms.server"
 import { adminAccess, createLink, listLinks, revokeLink } from "~/server/share.server"
 import { HttpError } from "~/server/util.server"
@@ -56,7 +57,9 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100)
   let folder = url.searchParams.get("folder") || null
   if (folder && !access.folders.some((f) => f.id === folder)) folder = null
-  const [summary, usage, links, page] = await Promise.all([collectionSummary(env, access.c.id), folderUsage(env, access.c.id), listLinks(env, access.c.id), listFiles(env, access, { folder, q })])
+  // By default a folder shows everything inside it, subfolders included, so the root is never empty when files sit deeper.
+  const scope = url.searchParams.get("scope") === "here" ? ("here" as const) : ("all" as const)
+  const [summary, usage, links, page] = await Promise.all([collectionSummary(env, access.c.id), folderCounts(env, access), listLinks(env, access.c.id), listFiles(env, access, { folder, q, recursive: scope === "all" })])
   const { password, revision, folder_root, ...c } = access.c
   return {
     collection: { ...c, password_set: !!password },
@@ -68,6 +71,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     next: page.next,
     folder,
     q,
+    scope,
     origin: url.origin,
     storageLimit: storageLimit(env),
     now: Date.now(),
@@ -126,7 +130,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 }
 
 export default function CollectionPage({ loaderData }: Route.ComponentProps) {
-  const { collection: c, summary, folders, usage, links, files, next, folder, q, origin, storageLimit, now } = loaderData
+  const { collection: c, summary, folders, usage, links, files, next, folder, q, scope, origin, storageLimit, now } = loaderData
   const [params] = useSearchParams()
   const [tab, setTab] = useRouteTab(["files", "links", "settings"])
   const [shareOpen, setShareOpen] = useState(false)
@@ -177,7 +181,13 @@ export default function CollectionPage({ loaderData }: Route.ComponentProps) {
         <FactStrip>
           <Fact label="Files" value={summary.files.toLocaleString("en-GB")} detail={summary.last_upload ? <>Last <Ago ts={summary.last_upload} /></> : "Nothing received yet"} />
           <Fact label="Storage" value={formatBytes(summary.bytes)} detail={`${pct}% of ${formatBytes(c.quota)}`} tone={pct >= 90 ? "danger" : pct >= 75 ? "warning" : "default"} />
-          <Fact label="Access" value={c.password_set ? "Password" : "Link only"} detail={c.expires ? <>{c.expires < now ? "Expired" : "Expires"} <Ago ts={c.expires} /></> : "Never expires"} tone={c.expires && c.expires < now ? "danger" : "default"} />
+          <Fact
+            label="Access"
+            value={c.password_set ? "Password" : "Link only"}
+            detail={c.expires ? <>{c.auto_delete ? (c.expires < now ? "Being deleted" : "Deleted") : c.expires < now ? "Expired" : "Expires"} <Ago ts={c.expires} /></> : "Never expires"}
+            tone={c.expires && c.expires < now ? "danger" : c.auto_delete ? "warning" : "default"}
+            help={c.auto_delete ? "This collection deletes itself, with all its files, at its expiry date. Change it in Settings." : undefined}
+          />
           <Fact label="Folders" value={summary.folders} detail={`${plural(links.length, "folder link")}`} />
         </FactStrip>
 
@@ -191,7 +201,7 @@ export default function CollectionPage({ loaderData }: Route.ComponentProps) {
           onChange={setTab}
         />
 
-        {tab === "files" && <FilesTab key={c.id} collection={c} folders={folders} usage={usage} files={files} next={next} folder={folder} q={q} />}
+        {tab === "files" && <FilesTab key={c.id} collection={c} folders={folders} usage={usage} files={files} next={next} folder={folder} q={q} scope={scope} />}
         {tab === "links" && <LinksTab collection={c} folders={folders} links={links} origin={origin} />}
         {tab === "settings" && <SettingsTab collection={c} storageLimit={storageLimit} />}
       </div>
@@ -236,7 +246,7 @@ function flattenFirst(folders: { id: string; parent: string | null; name: string
   }
 }
 
-function FilesTab({ collection: c, folders, usage, files, next, folder, q }: Pick<Data, "folders" | "usage" | "files" | "next" | "folder" | "q"> & { collection: Data["collection"] }) {
+function FilesTab({ collection: c, folders, usage, files, next, folder, q, scope }: Pick<Data, "folders" | "usage" | "files" | "next" | "folder" | "q" | "scope"> & { collection: Data["collection"] }) {
   const [params, setParams] = useSearchParams()
   const revalidator = useRevalidator()
   const navigation = useNavigation()
@@ -253,11 +263,14 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q }: Pic
     for (let f = current; f; f = folders.find((x) => x.id === f!.parent) ?? null) out.unshift({ id: f.id, name: f.name })
     return out
   }, [current, folders])
-  const href = (id: string | null) => {
+  const href = (id: string | null, nextScope: "all" | "here" = scope) => {
     const p = new URLSearchParams()
     if (id) p.set("folder", id)
+    if (nextScope === "here") p.set("scope", "here")
     return `?${p}`
   }
+  const treeCounts = useMemo(() => Object.fromEntries(Object.entries(usage).map(([k, v]) => [k, { files: v.total }])), [usage])
+  const subfolders = folders.filter((f) => f.parent === folder)
   const searching = navigation.state === "loading" && navigation.location?.search.includes("q=")
 
   return (
@@ -270,7 +283,7 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q }: Pic
           </Button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
-          <FolderTree folders={folders} current={q ? undefined : folder} href={href} rootLabel={c.name} counts={usage} showFlags />
+          <FolderTree folders={folders} current={q ? undefined : folder} href={(id) => href(id)} rootLabel={c.name} counts={treeCounts} showFlags />
         </div>
       </aside>
 
@@ -348,8 +361,26 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q }: Pic
         )}
         <UploadList tasks={uploads.tasks} onCancel={uploads.cancel} onClear={uploads.clear} />
 
+        {!q && subfolders.length > 0 && (
+          <section className="space-y-2" aria-label="Folders">
+            <h3 className="text-sm font-medium text-muted-foreground">Folders</h3>
+            <FolderCards folders={subfolders} counts={usage} href={(id) => href(id)} audience="admin" />
+          </section>
+        )}
+
         <div className={searching ? "opacity-60" : undefined}>
-          <FileBrowser files={files} next={next} apiBase={apiBase} folders={folders} rootLabel={c.name} query={q} folder={folder} />
+          <FileBrowser
+            files={files}
+            next={next}
+            apiBase={apiBase}
+            folders={folders}
+            rootLabel={c.name}
+            query={q}
+            folder={folder}
+            recursive={!q && scope === "all"}
+            toolbar={!q && subfolders.length > 0 ? <ScopeSwitch scope={scope} href={(s) => href(folder, s)} /> : null}
+            emptyText={scope === "all" ? (subfolders.length ? "No files here or in its subfolders yet." : "No files in this folder yet.") : "No files directly in this folder. Switch to Everything inside to see the files of its subfolders."}
+          />
         </div>
       </section>
 
@@ -499,7 +530,7 @@ function SettingsTab({ collection: c, storageLimit }: { collection: Data["collec
   const remove = useFetcher<{ error?: string }>()
   const [saved, setSaved] = useState(false)
   const [confirm, setConfirm] = useState(false)
-  const values: SettingsValues = { ...c, upload: !!c.upload, create_folder: !!c.create_folder, rename_own: !!c.rename_own }
+  const values: SettingsValues = { ...c, upload: !!c.upload, create_folder: !!c.create_folder, rename_own: !!c.rename_own, show_files: !!c.show_files, auto_delete: !!c.auto_delete }
   useEffect(() => {
     if (save.state === "idle" && save.data?.ok) {
       setSaved(true)
@@ -532,7 +563,7 @@ function SettingsTab({ collection: c, storageLimit }: { collection: Data["collec
                 </label>
               )}
             </div>
-            <ExpiryField value={c.expires} />
+            <ExpiryField value={c.expires} autoDelete={!!c.auto_delete} />
           </div>
           <LimitFields values={values} storageLimit={storageLimit} />
         </section>

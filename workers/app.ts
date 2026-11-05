@@ -1,6 +1,7 @@
 import { createRequestHandler } from "react-router"
 import { handleApi } from "../app/server/api.server"
 import { cleanup } from "../app/server/files.server"
+import { purgeExpired } from "../app/server/collections.server"
 import { withDashboardHeaders } from "../app/server/headers.server"
 import { initRequestCache } from "../app/server/request-cache.server"
 import { ensureMigrated, migrationFailureResponse, type Migration } from "../app/server/migrate.server"
@@ -60,10 +61,13 @@ export default {
     return out
   },
 
-  // Every hour (wrangler.jsonc): abandoned uploads are aborted and their reserved space released.
+  // Every hour (wrangler.jsonc): abandoned uploads are aborted and their reserved space released, and expired
+  // collections set to delete themselves are deleted.
   async scheduled(_controller, env, ctx) {
     await ensureMigrated(env.DB, migrations)
     ctx.waitUntil(cleanup(env).catch((error) => console.error("Folvio clean-up failed:", error)))
+    // Collections set to delete themselves at their expiry date.
+    ctx.waitUntil(purgeExpired(env).catch((error) => console.error("Folvio expiry deletion failed:", error)))
   },
 } satisfies ExportedHandler<Env>
 

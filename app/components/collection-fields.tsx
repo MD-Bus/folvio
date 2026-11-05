@@ -5,9 +5,9 @@ import { Switch } from "#/components/ui/switch"
 import { Textarea } from "#/components/ui/textarea"
 import { toLocalInput } from "#/lib/format"
 
-export type SettingsValues = { name: string; description: string; expires: number | null; quota: number; max_file: number; upload: boolean; create_folder: boolean; rename_own: boolean }
+export type SettingsValues = { name: string; description: string; expires: number | null; quota: number; max_file: number; upload: boolean; create_folder: boolean; rename_own: boolean; show_files: boolean; auto_delete: boolean }
 
-export const DEFAULT_SETTINGS: SettingsValues = { name: "", description: "", expires: null, quota: 1_000_000_000, max_file: 100_000_000, upload: true, create_folder: false, rename_own: false }
+export const DEFAULT_SETTINGS: SettingsValues = { name: "", description: "", expires: null, quota: 1_000_000_000, max_file: 100_000_000, upload: true, create_folder: false, rename_own: false, show_files: false, auto_delete: false }
 
 /** Name and description. */
 export function DetailsFields({ values }: { values: SettingsValues }) {
@@ -29,12 +29,16 @@ export function DetailsFields({ values }: { values: SettingsValues }) {
   )
 }
 
-/** The expiry as a local date and time; the hidden field holds Unix milliseconds (the server does not know the browser's time zone). */
-export function ExpiryField({ value }: { value: number | null }) {
+/**
+ * The expiry as a local date and time; the hidden field holds Unix milliseconds (the server does not know the
+ * browser's time zone). With "Delete at this date", the collection and all its files are deleted once it passes.
+ */
+export function ExpiryField({ value, autoDelete = false }: { value: number | null; autoDelete?: boolean }) {
   const [ms, setMs] = useState<number | null>(value)
+  const [remove, setRemove] = useState(autoDelete)
   return (
     <div className="grid gap-2">
-      <FieldLabel htmlFor="expires-local" help="After this moment the link stops working for recipients. Leave empty for no expiry. Files already received stay.">
+      <FieldLabel htmlFor="expires-local" help="After this moment the link stops working for recipients. Leave empty for no expiry.">
         Expires
       </FieldLabel>
       <Input
@@ -47,6 +51,13 @@ export function ExpiryField({ value }: { value: number | null }) {
         }}
       />
       <input type="hidden" name="expires" value={ms ?? ""} />
+      <label className={`flex items-start gap-2.5 rounded-md border p-2.5 text-sm ${ms ? "cursor-pointer" : "opacity-60"}`}>
+        <Switch name="auto_delete" checked={remove && !!ms} onCheckedChange={setRemove} disabled={!ms} className="mt-0.5" />
+        <span>
+          <span className="block font-medium">Delete the collection at this date</span>
+          <span className="block text-xs text-muted-foreground">{ms ? "Its files, folders and links are deleted for good within an hour of the expiry. Download what you need before." : "Set an expiry date first."}</span>
+        </span>
+      </label>
     </div>
   )
 }
@@ -90,6 +101,12 @@ export function PermissionFields({ values }: { values: SettingsValues }) {
       <SwitchRow name="upload" label="Accept uploads" description="Recipients can upload files into the folders they see. Turn off to close the collection without deleting anything." defaultChecked={values.upload} />
       <SwitchRow name="create_folder" label="Recipients can create folders" description="Off by default, so files land in the structure you prepared." defaultChecked={values.create_folder} />
       <SwitchRow name="rename_own" label="Recipients can rename their own folders" description="Only folders they created themselves, from the same browser. Recipients can never move or delete folders." defaultChecked={values.rename_own} />
+      <SwitchRow
+        name="show_files"
+        label="Recipients see all files"
+        description="Everyone with the link sees, previews and downloads every file in the folders they can open, including what others sent. Off: each recipient only sees their own uploads. Use it for teams, not for collecting from several clients."
+        defaultChecked={values.show_files}
+      />
     </div>
   )
 }

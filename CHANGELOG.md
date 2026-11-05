@@ -12,7 +12,10 @@ A full rebuild on the stack and dashboard of [Warden](https://github.com/momardi
 - Wizard with folder templates; folder links tab; replace the collection link; delete a collection with its files.
 - File browser: grid with image previews or list, search across the collection, select, move, rename, delete, download; per-folder counts.
 - Upload queue with drag and drop, progress per file, cancel, a retry per part, and a warning before leaving the page.
-- Recipient page: instructions, folders they may use, their own files, password page, expired page, phone layout.
+- Recipient page: instructions, a folder menu saying where to put files (counts, view-only folders), folder cards, previews of the images they sent, a first-visit tour with Next, Back and Skip ("How it works" reopens it), password page, expired page, phone layout.
+- Folders show their subfolders as cards and everything inside them, subfolders included (admin and recipients); `recursive=1` in the API. Admins can switch to "This folder only".
+- Option "Recipients see all files" (`show_files`): everyone with the link sees, previews and downloads all files of the folders they can open. Off by default.
+- Option "Delete the collection at this date" (`auto_delete`): the hourly clean-up deletes the collection and its files after its expiry, in bounded batches. Migration 0005 adds both columns.
 - Automatic provisioning of D1 (`folvio-db`) and R2 (`folvio-files`) on deploy, reusing them when they already exist (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.
 - API keys show when they were created and last used.
 - In Cloudflare Workers Builds the app builds itself after the dependency install, so Workers connected with the 0.1.0 settings (no build command) deploy without changes. Node 22 is pinned in `.node-version`.

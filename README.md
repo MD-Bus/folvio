@@ -48,11 +48,13 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 **Collections and folders**
 - A five-step wizard with folder templates (website project, photo shoot, client onboarding, event) and an editable nested tree.
 - Stable, random links. Optional password, expiry date, storage limit and maximum file size per collection. Replace the link at any time if it reached the wrong people.
+- **Auto-delete at expiry**: optionally, the collection deletes itself with all its files once its expiry date has passed (the hourly clean-up does it, in bounded batches).
 - Per-folder overrides for upload, subfolder creation and renaming (allow, deny or inherit), and hidden folders whose whole subtree disappears for recipients.
 - **Folder links**: a link that opens one folder and what is inside it, never its neighbours, revocable on its own.
 - Recipient folder creation is **off by default**, so files land in the structure you prepared. Recipients can never move or delete folders.
 
 **Received files**
+- A folder shows its subfolders as cards and **everything inside it**, subfolders included, so the root is never empty (switch to *This folder only* when you want).
 - Grid view with image previews, or list view; search across the whole collection; select, move, rename, delete and download.
 - Per-folder file counts, storage use per collection and for the installation, last-upload times.
 - An overview with open collections, files received, storage against the limit, uploads in progress and a 30-day chart.
@@ -79,12 +81,16 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 
 ## What recipients see
 
-A clean page with your instructions, the folders they may use, a drop area and the files *they* sent. They never see other recipients' files or hidden folders.
+A clean page with your instructions, a folder menu that says where to put files (with counts, and a lock on view-only folders), folder cards, a drop area and **previews of the images they sent**. On their first visit a short tour (Next, Back, **Skip**) explains it in three steps; *How it works* opens it again.
+
+By default each recipient only sees, previews and downloads the files they sent, never other recipients' files, and never hidden folders. Turn on **Recipients see all files** for a team collection where everyone with the link should see everything in the folders they can open.
 
 <p>
 <img src="docs/screenshots/recipient.jpg" alt="Recipient page" width="74%">
 <img src="docs/screenshots/recipient-mobile.jpg" alt="Recipient page on a phone" width="24%">
 </p>
+
+![The tour shown on the first visit](docs/screenshots/recipient-tour.jpg)
 
 ## Links for programs and AI agents
 
@@ -98,7 +104,7 @@ curl -H "Accept: application/json" https://files.example.com/s/<token>
 curl -T logo.svg "https://files.example.com/api/v1/share/<token>/upload/logo.svg?folder=Branding/Logos"
 ```
 
-- The first response carries an `X-Folvio-Recipient` header. Send it back on later requests to list the files that program sent (`GET …/files?folder=Branding/Logos`). Each program only sees its own uploads, like each browser.
+- The first response carries an `X-Folvio-Recipient` header. Send it back on later requests to list the files that program sent (`GET …/files?folder=Branding/Logos&recursive=1`). Each program only sees its own uploads, like each browser (or everything, when the collection shows all files).
 - Password-protected links: send `X-Folvio-Password: <password>` on the first request (attempts are throttled).
 - Folders can be given by path (`Branding/Logos`, case-insensitive) or by id. A folder link's paths start at its folder.
 - Larger files use the same parts protocol as the browser (reserve, PUT parts, complete). The JSON manifest spells it out.
@@ -184,7 +190,7 @@ Folvio runs on Workers Free, D1 and R2 Standard: no paid Workers plan, Queues or
 
 - Admin sessions are opaque random tokens stored as hashes in D1; a password change logs every session out. Logins and link passwords are throttled per address.
 - Permissions are enforced by the Worker on every request, including every upload part: inherited overrides, hidden ancestors, folder-link scope, ownership of uploads.
-- Recipients and programs only ever see their own uploads. Files are downloaded by the administrator only, as attachments; image previews are limited to raster formats (never SVG or HTML).
+- Recipients and programs only see their own uploads, unless you turn on *Recipients see all files*. Downloads are attachments; image previews are limited to raster formats (never SVG or HTML).
 - Files are **not** scanned for malware. Treat received files as untrusted.
 
 See [SECURITY.md](SECURITY.md) for the full model and its limits.

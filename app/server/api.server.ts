@@ -75,6 +75,7 @@ function serializeCollection(access: Access, base: string) {
     upload: !!c.upload,
     create_folder: !!c.create_folder,
     rename_own: !!c.rename_own,
+    show_files: !!c.show_files,
     token: access.admin ? c.token : undefined,
     password_set: !!password,
     folders: folders.map((f) => ({ ...f, path: folderPath(folders, f.id, "/"), hidden: !!f.hidden, own: access.admin ? undefined : f.own })),
@@ -89,7 +90,8 @@ function apiGuide(base: string) {
     base,
     upload: `PUT ${base}/upload/<file name>?folder=<folder path, e.g. Branding/Logos, or id; empty for the top> with the raw file as the body (curl -T report.pdf "${base}/upload/report.pdf?folder=Branding/Logos"). Up to ${SINGLE_UPLOAD_MAX.toLocaleString("en-GB")} bytes per request and max_file per file.`,
     large_files: `POST ${base}/uploads {"name","size","folder"} -> {id, parts, part_size}; PUT ${base}/uploads/<id>/parts/<n> with exactly part_size bytes (the last part is shorter) -> {partNumber, etag}; POST ${base}/uploads/<id>/complete {"parts":[{partNumber, etag}, ...]}`,
-    list_files: `GET ${base}/files?folder=<path or id> lists the files you sent (newest first, ?after=<next> for more).`,
+    list_files: `GET ${base}/files?folder=<path or id> lists the files you can see (yours, or all when show_files is true), newest first; &recursive=1 includes subfolders, ?after=<next> pages.`,
+    download: `GET ${base}/files/<id>/download for a file you can see; /preview for an image.`,
     create_folder: `POST ${base}/folders {"name","parent": <path or id>} when permissions.create_folder is true for that folder.`,
     identity: `The first response carries an X-Folvio-Recipient header. Send it back on later requests to keep seeing the files you sent. Password-protected links: send X-Folvio-Password on the first request.`,
   }
@@ -113,7 +115,8 @@ async function collectionRoutes(request: Request, env: Env, access: Access, rest
   if (section === "files") {
     if (!id && method === "GET") {
       const q = url.searchParams.get("q") ?? undefined
-      const page = await listFiles(env, access, { folder: q ? null : findFolderParam(access, url.searchParams.get("folder")), q, after: url.searchParams.get("after"), limit: Number(url.searchParams.get("limit")) || undefined })
+      const recursive = ["1", "true"].includes(url.searchParams.get("recursive") ?? "")
+      const page = await listFiles(env, access, { folder: q ? null : findFolderParam(access, url.searchParams.get("folder")), q, recursive, after: url.searchParams.get("after"), limit: Number(url.searchParams.get("limit")) || undefined })
       return json(page)
     }
     if (id && !sub && method === "PATCH") {
@@ -131,10 +134,9 @@ async function collectionRoutes(request: Request, env: Env, access: Access, rest
       const file = await getFile(env, access, id)
       return json({ id: file.id, name: file.name, size: file.size, created: file.created, folder: file.folder })
     }
-    if (id && (sub === "download" || sub === "preview") && method === "GET") {
-      if (!access.admin) fail(403, "Only the administrator can download files.")
-      return streamFile(env, await getFile(env, access, id), sub)
-    }
+    // Recipients can open the files they may see: their own, or every file of the folders they can open when the
+    // collection shows all files.
+    if (id && (sub === "download" || sub === "preview") && method === "GET") return streamFile(env, await getFile(env, access, id), sub)
   }
 
   if (section === "folders") {

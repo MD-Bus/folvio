@@ -17,6 +17,8 @@ export function settingsFromForm(form: FormData): Record<string, unknown> {
     upload: form.get("upload") === "on",
     create_folder: form.get("create_folder") === "on",
     rename_own: form.get("rename_own") === "on",
+    show_files: form.get("show_files") === "on",
+    auto_delete: form.get("auto_delete") === "on" && Boolean(form.get("expires")),
   }
   return out
 }

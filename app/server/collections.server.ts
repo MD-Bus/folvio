@@ -14,6 +14,10 @@ export type CollectionRow = {
   create_folder: number
   rename_own: number
   upload: number
+  /** 1: recipients see every file in the folders they can open; 0: only the files they sent. */
+  show_files: number
+  /** 1: the collection and its files are deleted once `expires` has passed. */
+  auto_delete: number
   created: number
   revision: number
 }
@@ -21,10 +25,10 @@ export type CollectionRow = {
 /** A collection as reached through a link: `folder_root` is the folder a folder link is limited to (null: all). */
 export type ReachedCollection = CollectionRow & { folder_root: string | null }
 
-export const DEFAULTS = { description: "", expires: null as number | null, quota: 1_000_000_000, max_file: 100_000_000, upload: 1, create_folder: 0, rename_own: 0 }
+export const DEFAULTS = { description: "", expires: null as number | null, quota: 1_000_000_000, max_file: 100_000_000, upload: 1, create_folder: 0, rename_own: 0, show_files: 0, auto_delete: 0 }
 export const MAX_FILE_BYTES = 2_000_000_000
 
-export type Settings = Pick<CollectionRow, "name" | "description" | "expires" | "quota" | "max_file" | "upload" | "create_folder" | "rename_own">
+export type Settings = Pick<CollectionRow, "name" | "description" | "expires" | "quota" | "max_file" | "upload" | "create_folder" | "rename_own" | "show_files" | "auto_delete">
 
 function integer(value: unknown, min: number, max: number, what: string): number {
   const n = typeof value === "string" && value.trim() !== "" ? Number(value) : value
@@ -47,7 +51,7 @@ export function parseSettings(env: Env, input: Record<string, unknown>, base: Pa
     if (typeof input.description !== "string" || input.description.length > 2000) fail(400, "The description is limited to 2,000 characters.")
     out.description = input.description.trim()
   }
-  for (const key of ["upload", "create_folder", "rename_own"] as const) {
+  for (const key of ["upload", "create_folder", "rename_own", "show_files", "auto_delete"] as const) {
     if (key in input) {
       if (typeof input[key] !== "boolean") fail(400, "Permissions must be true or false.")
       out[key] = Number(input[key])
@@ -56,6 +60,7 @@ export function parseSettings(env: Env, input: Record<string, unknown>, base: Pa
   if ("quota" in input) out.quota = integer(input.quota, 1, storageLimit(env), "The storage limit")
   if ("max_file" in input) out.max_file = integer(input.max_file, 1, MAX_FILE_BYTES, "The maximum file size")
   if ("expires" in input) out.expires = input.expires === null || input.expires === "" ? null : integer(input.expires, 1, 8_640_000_000_000_000, "The expiry")
+  if (out.auto_delete && !out.expires) fail(400, "Set an expiry date to delete the collection automatically.")
   return out
 }
 
@@ -70,7 +75,7 @@ export async function getFolders(env: Env, collectionId: string): Promise<Folder
   return all<FolderRow>(env, "SELECT * FROM folders WHERE collection = ?", collectionId)
 }
 
-export type CollectionSummary = Pick<CollectionRow, "id" | "token" | "name" | "description" | "expires" | "created" | "upload" | "quota"> & {
+export type CollectionSummary = Pick<CollectionRow, "id" | "token" | "name" | "description" | "expires" | "created" | "upload" | "quota" | "auto_delete"> & {
   protected: number
   files: number
   bytes: number
@@ -78,7 +83,7 @@ export type CollectionSummary = Pick<CollectionRow, "id" | "token" | "name" | "d
   last_upload: number | null
 }
 
-const SUMMARY = `SELECT c.id, c.token, c.name, c.description, c.expires, c.created, c.upload, c.quota, c.password IS NOT NULL AS protected,
+const SUMMARY = `SELECT c.id, c.token, c.name, c.description, c.expires, c.created, c.upload, c.quota, c.auto_delete, c.password IS NOT NULL AS protected,
   (SELECT count(*) FROM uploads u WHERE u.collection = c.id AND u.state = 'complete') AS files,
   (SELECT coalesce(sum(size), 0) FROM uploads u WHERE u.collection = c.id AND u.state = 'complete') AS bytes,
   (SELECT count(*) FROM folders f WHERE f.collection = c.id) AS folders,
@@ -113,8 +118,8 @@ export async function createCollection(env: Env, input: Record<string, unknown>,
   const ids = new Map(folders.map((f) => [f.id, newRowId()]))
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO collections (id, token, name, description, password, expires, quota, max_file, create_folder, rename_own, upload, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).bind(id, token, s.name, s.description, password, s.expires, s.quota, s.max_file, s.create_folder, s.rename_own, s.upload, Date.now()),
+      "INSERT INTO collections (id, token, name, description, password, expires, quota, max_file, create_folder, rename_own, upload, show_files, auto_delete, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(id, token, s.name, s.description, password, s.expires, s.quota, s.max_file, s.create_folder, s.rename_own, s.upload, s.show_files, s.auto_delete, Date.now()),
     ...folders.map((f) =>
       env.DB.prepare("INSERT INTO folders (id, collection, parent, name, creator) VALUES (?, ?, ?, ?, 'admin')").bind(ids.get(f.id)!, id, f.parent ? ids.get(f.parent)! : null, f.name),
     ),
@@ -132,7 +137,7 @@ export async function updateCollection(env: Env, c: CollectionRow, input: Record
   }
   const updated = await run(
     env,
-    "UPDATE collections SET name = ?, description = ?, password = ?, expires = ?, quota = ?, max_file = ?, create_folder = ?, rename_own = ?, upload = ? WHERE id = ? AND revision = ?",
+    "UPDATE collections SET name = ?, description = ?, password = ?, expires = ?, quota = ?, max_file = ?, create_folder = ?, rename_own = ?, upload = ?, show_files = ?, auto_delete = ? WHERE id = ? AND revision = ?",
     s.name,
     s.description,
     password,
@@ -142,6 +147,8 @@ export async function updateCollection(env: Env, c: CollectionRow, input: Record
     s.create_folder,
     s.rename_own,
     s.upload,
+    s.show_files,
+    s.auto_delete,
     c.id,
     c.revision,
   )
@@ -155,20 +162,53 @@ export async function regenerateToken(env: Env, c: CollectionRow): Promise<strin
   return token
 }
 
+/** Stored objects deleted per step: one R2 call deletes up to 1,000 keys. */
+const PURGE_BATCH = 1000
+
+/**
+ * Deletes up to PURGE_BATCH stored files of a collection (aborting uploads in progress) and returns whether files
+ * remain. Bounded so one request or one clean-up run stays within the free plan's limits.
+ */
+async function purgeFiles(env: Env, collectionId: string): Promise<boolean> {
+  const uploads = await all<{ id: string; object_key: string; multipart: string | null; state: string }>(env, "SELECT id, object_key, multipart, state FROM uploads WHERE collection = ? LIMIT ?", collectionId, PURGE_BATCH)
+  if (uploads.length === 0) return false
+  // At most 20 multipart aborts per step (each is a request); the hourly clean-up handles any left over.
+  for (const up of uploads.filter((u) => u.state !== "complete" && u.multipart).slice(0, 20)) await env.FILES.resumeMultipartUpload(up.object_key, up.multipart!).abort().catch(() => {})
+  await env.FILES.delete(uploads.map((u) => u.object_key))
+  await env.DB.prepare("DELETE FROM uploads WHERE id IN (SELECT value FROM json_each(?))").bind(JSON.stringify(uploads.map((u) => u.id))).run()
+  return uploads.length === PURGE_BATCH
+}
+
 /** Deletes a collection: its stored files, pending uploads, links, folders and the collection itself. */
-export async function deleteCollection(env: Env, c: CollectionRow): Promise<void> {
-  const uploads = await all<{ object_key: string; multipart: string | null; state: string }>(env, "SELECT object_key, multipart, state FROM uploads WHERE collection = ?", c.id)
-  for (const up of uploads) {
-    if (up.state !== "complete" && up.multipart) await env.FILES.resumeMultipartUpload(up.object_key, up.multipart).abort().catch(() => {})
-  }
-  const keys = uploads.map((u) => u.object_key)
-  for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000))
+export async function deleteCollection(env: Env, c: Pick<CollectionRow, "id">): Promise<void> {
+  // A large collection takes several batches; each batch is a handful of requests.
+  for (let i = 0; i < 20 && (await purgeFiles(env, c.id)); i++) {}
+  if (await one(env, "SELECT id FROM uploads WHERE collection = ? LIMIT 1", c.id)) fail(503, "The collection is very large: its files are still being deleted. Try again in a moment.")
   await env.DB.batch([
     env.DB.prepare("DELETE FROM folder_links WHERE collection = ?").bind(c.id),
-    env.DB.prepare("DELETE FROM uploads WHERE collection = ?").bind(c.id),
     env.DB.prepare("DELETE FROM folders WHERE collection = ?").bind(c.id),
     env.DB.prepare("DELETE FROM collections WHERE id = ?").bind(c.id),
   ])
+}
+
+/**
+ * Hourly: collections set to delete themselves whose expiry has passed lose a batch of files per run; once empty,
+ * the collection, its folders and links are deleted. Returns the number of collections fully deleted.
+ */
+export async function purgeExpired(env: Env, now = Date.now()): Promise<number> {
+  const due = await all<{ id: string }>(env, "SELECT id FROM collections WHERE auto_delete = 1 AND expires IS NOT NULL AND expires < ? ORDER BY expires LIMIT 3", now)
+  let deleted = 0
+  for (const c of due) {
+    if (await purgeFiles(env, c.id)) continue
+    if (await one(env, "SELECT id FROM uploads WHERE collection = ? LIMIT 1", c.id)) continue
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM folder_links WHERE collection = ?").bind(c.id),
+      env.DB.prepare("DELETE FROM folders WHERE collection = ?").bind(c.id),
+      env.DB.prepare("DELETE FROM collections WHERE id = ?").bind(c.id),
+    ])
+    deleted++
+  }
+  return deleted
 }
 
 // ---- folders --------------------------------------------------------------------------------------------------------
@@ -210,6 +250,20 @@ export function authorize(access: Access, folder: string | null, action: "upload
   if (action !== "view" && !p[action]) fail(403, "You do not have permission for this folder.")
   return p
 }
+
+/** True when the caller may see `folder`: the administrator always, a recipient inside the link's folder and not hidden. */
+export function canSee(access: Access, folder: string | null): boolean {
+  if (access.admin) return true
+  if (!within(access, folder)) return false
+  try {
+    return !permissionsAt(access, folder).hidden
+  } catch {
+    return false
+  }
+}
+
+/** True when the caller sees every file, not only their own uploads. */
+export const seesAllFiles = (access: Access) => access.admin || !!access.c.show_files
 
 /** Folders a recipient can see: inside the link's folder and not hidden. The administrator sees all. */
 export function visibleFolders(access: Access) {

@@ -1,34 +1,59 @@
 import { cleanName, FolderError } from "#/lib/folders"
 import { IMAGE_TYPES, PART_SIZE, PREVIEW_MAX_BYTES } from "#/lib/format"
-import { authorize, like, permissionsAt, resolveFolder, wrapFolderErrors, type Access } from "./collections.server"
+import { authorize, canSee, like, permissionsAt, resolveFolder, seesAllFiles, wrapFolderErrors, type Access } from "./collections.server"
 import { all, newRowId, one, run, storageLimit } from "./db.server"
 import { fail } from "./util.server"
 
 export type FileRow = { id: string; collection: string; folder: string | null; owner: string; name: string; size: number; object_key: string; multipart: string | null; state: string; expires: number; created: number }
-export type FileItem = { id: string; name: string; size: number; created: number; folder: string | null; uploader: "admin" | "recipient" }
+export type FileItem = { id: string; name: string; size: number; created: number; folder: string | null; uploader: "admin" | "recipient"; own: boolean }
 
 export const PAGE = 100
 
+/** The ids of `root` and every folder below it that the caller can see. */
+function subtree(access: Access, root: string | null): string[] {
+  const out: string[] = []
+  const walk = (parent: string | null) => {
+    for (const f of access.folders) {
+      if (f.parent === parent && canSee(access, f.id)) {
+        out.push(f.id)
+        walk(f.id)
+      }
+    }
+  }
+  if (root) out.push(root)
+  walk(root)
+  return out
+}
+
 /**
- * Received files, newest first, `PAGE` at a time plus one look-ahead record. A recipient only sees the files they
- * uploaded. With `q`, searches file names across the whole collection (or, for a recipient, what they can see).
+ * Received files, newest first, `PAGE` at a time plus one look-ahead record. With `recursive`, the files of the folder
+ * and of everything below it. A recipient sees the files they sent, or every file of the folders they can open when
+ * the collection shows all files. With `q`, searches file names across everything the caller can see.
  * The cursor is `<created>_<id>` of the last file of the previous page.
  */
-export async function listFiles(env: Env, access: Access, opts: { folder?: string | null; q?: string; after?: string | null; limit?: number }): Promise<{ files: FileItem[]; next: string | null }> {
+export async function listFiles(env: Env, access: Access, opts: { folder?: string | null; q?: string; after?: string | null; limit?: number; recursive?: boolean }): Promise<{ files: FileItem[]; next: string | null }> {
   const limit = Math.min(Math.max(opts.limit ?? PAGE, 1), 200)
   const where = ["collection = ?", "state = 'complete'"]
   const args: (string | number | null)[] = [access.c.id]
   const q = opts.q?.trim()
-  if (q) {
-    where.push("name LIKE ? ESCAPE '\\'")
-    args.push(like(q))
+  const folder = resolveFolder(access, opts.folder)
+  if (q || opts.recursive) {
+    const root = q ? resolveFolder(access, null) : folder
+    authorize(access, root, "view")
+    const ids = subtree(access, root)
+    // One bound parameter (a JSON array), whatever the number of folders: D1 allows at most 100 per statement.
+    where.push(root === null ? "(folder IS NULL OR folder IN (SELECT value FROM json_each(?)))" : "folder IN (SELECT value FROM json_each(?))")
+    args.push(JSON.stringify(ids))
   } else {
-    const folder = resolveFolder(access, opts.folder)
     authorize(access, folder, "view")
     where.push("folder IS ?")
     args.push(folder)
   }
-  if (!access.admin) {
+  if (q) {
+    where.push("name LIKE ? ESCAPE '\\'")
+    args.push(like(q))
+  }
+  if (!seesAllFiles(access)) {
     where.push("owner = ?")
     args.push(access.owner)
   }
@@ -38,27 +63,46 @@ export async function listFiles(env: Env, access: Access, opts: { folder?: strin
     args.push(Number(cursor[1]), Number(cursor[1]), cursor[2])
   }
   const rows = await all<FileRow>(env, `SELECT id, name, size, created, folder, owner FROM uploads WHERE ${where.join(" AND ")} ORDER BY created DESC, id DESC LIMIT ?`, ...args, limit + 1)
-  let visible = rows
-  if (q && !access.admin) visible = rows.filter((r) => isVisible(access, r.folder))
-  const page = visible.slice(0, limit)
+  const page = rows.slice(0, limit)
   return {
-    files: page.map((r) => ({ id: r.id, name: r.name, size: r.size, created: r.created, folder: r.folder, uploader: r.owner === "admin" ? "admin" : "recipient" })),
+    files: page.map((r) => ({ id: r.id, name: r.name, size: r.size, created: r.created, folder: r.folder, uploader: r.owner === "admin" ? "admin" : "recipient", own: r.owner === access.owner })),
     next: rows.length > limit ? `${page.at(-1)!.created}_${page.at(-1)!.id}` : null,
   }
 }
 
-function isVisible(access: Access, folder: string | null): boolean {
-  try {
-    authorize(access, folder, "view")
-    return true
-  } catch {
-    return false
+/**
+ * Files per folder, counting what the caller can see (key "" is the root). `files` counts the folder itself,
+ * `total` the folder and everything below it.
+ */
+export async function folderCounts(env: Env, access: Access): Promise<Record<string, { files: number; total: number; bytes: number }>> {
+  const rows = seesAllFiles(access)
+    ? await all<{ folder: string | null; files: number; bytes: number }>(env, "SELECT folder, count(*) AS files, coalesce(sum(size), 0) AS bytes FROM uploads WHERE collection = ? AND state = 'complete' GROUP BY folder", access.c.id)
+    : await all<{ folder: string | null; files: number; bytes: number }>(env, "SELECT folder, count(*) AS files, coalesce(sum(size), 0) AS bytes FROM uploads WHERE collection = ? AND state = 'complete' AND owner = ? GROUP BY folder", access.c.id, access.owner)
+  const direct = new Map(rows.map((r) => [r.folder ?? "", r]))
+  const out: Record<string, { files: number; total: number; bytes: number }> = {}
+  const visit = (id: string | null): { total: number; bytes: number } => {
+    const key = id ?? ""
+    const own = direct.get(key)
+    let total = own?.files ?? 0
+    let bytes = own?.bytes ?? 0
+    for (const f of access.folders) {
+      if (f.parent === id && canSee(access, f.id)) {
+        const child = visit(f.id)
+        total += child.total
+        bytes += child.bytes
+      }
+    }
+    out[key] = { files: own?.files ?? 0, total, bytes }
+    return { total, bytes }
   }
+  visit(null)
+  return out
 }
 
+/** A received file the caller may see: the administrator any, a recipient their own or, with show_files, any in a visible folder. */
 export async function getFile(env: Env, access: Access, id: string): Promise<FileRow> {
   const file = await one<FileRow>(env, "SELECT * FROM uploads WHERE id = ? AND collection = ? AND state = 'complete'", id, access.c.id)
-  if (!file || (!access.admin && file.owner !== access.owner)) fail(404, "File not found.")
+  if (!file || !canSee(access, file.folder) || (!seesAllFiles(access) && file.owner !== access.owner)) fail(404, "File not found.")
   return file
 }
 

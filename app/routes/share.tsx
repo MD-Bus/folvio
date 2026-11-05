@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { data, Link, redirect, useFetcher, useNavigation, useRevalidator } from "react-router"
-import { CalendarClock, CircleCheck, Folder, FolderPlus, Lock, Moon, Pencil, Sun } from "lucide-react"
+import { CalendarClock, ChevronRight, CircleCheck, CircleHelp, Eye, EyeOff, Folder, FolderOpen, FolderPlus, Lock, Moon, Pencil, Sun, Upload } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { Route } from "./+types/share"
 import { AgentHelp } from "#/components/agent-help"
 import { FileIcon } from "#/components/file-icon"
-import { FolderTree } from "#/components/folder-tree"
+import { FolderCards } from "#/components/folder-cards"
+import { RecipientTour, useFirstVisit } from "#/components/recipient-tour"
 import { NewFolderDialog } from "#/components/folder-dialogs"
 import { Ago, When } from "#/components/time"
 import { DropZone, UploadList } from "#/components/upload-panel"
@@ -16,10 +17,11 @@ import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { useUploads } from "#/hooks/use-uploads"
 import { folderPath } from "#/lib/folders"
-import { formatBytes } from "#/lib/format"
+import { canPreview, formatBytes } from "#/lib/format"
+import { cn } from "#/lib/utils"
 import { clearThrottle, throttle } from "~/server/auth.server"
 import { createFolder, getFolders, permissionsAt, updateFolder, visibleFolders, type Access } from "~/server/collections.server"
-import { listFiles } from "~/server/files.server"
+import { folderCounts, listFiles } from "~/server/files.server"
 import { attempt } from "~/server/forms.server"
 import { findShare, isExpired, openShare, recipientAccess, recipientId } from "~/server/share.server"
 import { HttpError } from "~/server/util.server"
@@ -43,7 +45,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const env = context.cloudflare.env
   const c = await findShare(env, params.token)
   if (!c) throw data("This link does not exist or was revoked.", { status: 404 })
-  if (isExpired(c)) return { state: "expired" as const, name: c.name, expires: c.expires }
+  if (isExpired(c)) return { state: "expired" as const, name: c.name, expires: c.expires, autoDelete: Boolean(c.auto_delete) }
   let owner = await recipientId(request, env, c)
   let cookie: string | null = null
   if (!owner) {
@@ -58,7 +60,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   let folder = url.searchParams.get("folder") || null
   if (folder && !folders.some((f) => f.id === folder)) folder = null
   const here = permissionsAt(access, folder ?? c.folder_root)
-  const page = await listFiles(env, access, { folder, limit: 200 })
+  // A folder shows everything inside it, subfolders included.
+  const [page, counts] = await Promise.all([listFiles(env, access, { folder, limit: 200, recursive: true }), folderCounts(env, access)])
   const root = c.folder_root ? access.folders.find((f) => f.id === c.folder_root) : null
   const payload = {
     state: "open" as const,
@@ -67,11 +70,17 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     scoped: Boolean(root),
     description: c.description,
     expires: c.expires,
+    autoDelete: Boolean(c.auto_delete),
     maxFile: c.max_file,
     folders: folders.map(({ id, parent, name, own, permissions }) => ({ id, parent, name, own, permissions })),
     folder,
     here,
+    permissionsTop: permissionsAt(access, c.folder_root),
     files: page.files,
+    more: Boolean(page.next),
+    counts,
+    showFiles: Boolean(c.show_files),
+    rootKey: c.folder_root ?? "",
     token: params.token,
     link: `${url.origin}/s/${params.token}`,
     passwordSet: Boolean(c.password),
@@ -104,22 +113,29 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   })
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, onHelp }: { children: React.ReactNode; onHelp?: () => void }) {
   const { resolvedTheme, setTheme } = useTheme()
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-background">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+      <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <img src="/favicon.svg" alt="" className="size-7 rounded-md" /> Folvio
           </span>
-          <Button variant="ghost" size="icon" className="size-8" aria-label="Switch theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
-            <Sun className="hidden size-4 dark:block" />
-            <Moon className="size-4 dark:hidden" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onHelp && (
+              <Button variant="ghost" size="sm" onClick={onHelp}>
+                <CircleHelp /> How it works
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="size-8" aria-label="Switch theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
+              <Sun className="hidden size-4 dark:block" />
+              <Moon className="size-4 dark:hidden" />
+            </Button>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">{children}</main>
     </div>
   )
 }
@@ -131,7 +147,10 @@ export default function Share({ loaderData }: Route.ComponentProps) {
         <div className="mx-auto max-w-md space-y-3 py-16 text-center">
           <CalendarClock className="mx-auto size-10 text-muted-foreground" />
           <h1 className="text-2xl font-semibold tracking-tight">{loaderData.name}</h1>
-          <p className="text-muted-foreground">This collection closed {loaderData.expires ? <When ts={loaderData.expires} /> : ""}. Ask the person who sent you the link for a new one.</p>
+          <p className="text-muted-foreground">
+            This collection closed {loaderData.expires ? <When ts={loaderData.expires} /> : ""}
+            {loaderData.autoDelete ? " and its files are deleted" : ""}. Ask the person who sent you the link for a new one.
+          </p>
         </div>
       </Shell>
     )
@@ -170,72 +189,158 @@ function Unlock({ name, description }: { name: string; description: string }) {
 }
 
 type OpenData = Extract<Route.ComponentProps["loaderData"], { state: "open" }>
+type RFolder = OpenData["folders"][number]
+
+/** The folder menu: what each folder is for at a glance, with the number of files and whether uploads are open. */
+function FolderMenu({ d, href }: { d: OpenData; href: (id: string | null) => string }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const rows = (parent: string | null, depth: number): React.ReactNode[] =>
+    d.folders
+      .filter((f) => f.parent === parent)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
+      .flatMap((f) => {
+        const kids = d.folders.some((x) => x.parent === f.id)
+        const open = !collapsed.has(f.id)
+        return [
+          <li key={f.id}>
+            <div className={cn("flex items-center rounded-md", d.folder === f.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/60")} style={{ paddingLeft: depth * 14 }}>
+              {kids ? (
+                <button
+                  type="button"
+                  className="flex size-6 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                  aria-label={open ? `Collapse ${f.name}` : `Expand ${f.name}`}
+                  aria-expanded={open}
+                  onClick={() => setCollapsed((s) => (s.has(f.id) ? new Set([...s].filter((x) => x !== f.id)) : new Set([...s, f.id])))}
+                >
+                  <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
+                </button>
+              ) : (
+                <span className="size-6 shrink-0" />
+              )}
+              <Link to={href(f.id)} preventScrollReset aria-current={d.folder === f.id ? "page" : undefined} className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-sm">
+                {d.folder === f.id ? <FolderOpen className="size-4 shrink-0 text-muted-foreground" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />}
+                <span className={cn("truncate", d.folder === f.id && "font-medium")}>{f.name}</span>
+                {!f.permissions.upload && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="View only" />}
+                {(d.counts[f.id]?.total ?? 0) > 0 && <span className="ml-auto text-xs text-muted-foreground tabular-nums">{d.counts[f.id].total}</span>}
+              </Link>
+            </div>
+          </li>,
+          ...(open ? rows(f.id, depth + 1) : []),
+        ]
+      })
+  const rootTotal = d.counts[d.rootKey]?.total ?? 0
+  return (
+    <nav aria-label="Folders" className="space-y-3">
+      <div className="px-2">
+        <h2 className="text-sm font-semibold">Where to put your files</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">Pick a folder, then add files to it.</p>
+      </div>
+      <ul className="space-y-px">
+        <li>
+          <Link
+            to={href(null)}
+            preventScrollReset
+            aria-current={d.folder === null ? "page" : undefined}
+            className={cn("flex items-center gap-2 rounded-md px-2 py-1.5 text-sm", d.folder === null ? "bg-accent font-medium text-accent-foreground" : "hover:bg-accent/60")}
+          >
+            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{d.name}</span>
+            {!d.permissionsTop.upload && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="View only" />}
+            {rootTotal > 0 && <span className="ml-auto text-xs text-muted-foreground tabular-nums">{rootTotal}</span>}
+          </Link>
+        </li>
+        {rows(null, 1)}
+      </ul>
+      <div className="space-y-1.5 border-t px-2 pt-3 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1.5">
+          <span className="rounded bg-muted px-1 tabular-nums">3</span> files inside, subfolders included
+        </p>
+        <p className="flex items-center gap-1.5">
+          <Lock className="size-3" /> View only: no uploads here
+        </p>
+        <p className="flex items-center gap-1.5">
+          {d.showFiles ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+          {d.showFiles ? "Everyone with the link sees all files" : "Only you and the owner see your files"}
+        </p>
+      </div>
+    </nav>
+  )
+}
 
 function Open({ data: d }: { data: OpenData }) {
   const revalidator = useRevalidator()
-  const uploads = useUploads(`/api/v1/share/${d.token}`, () => revalidator.revalidate(), d.maxFile)
+  const base = `/api/v1/share/${d.token}`
+  const uploads = useUploads(base, () => revalidator.revalidate(), d.maxFile)
   const [newFolder, setNewFolder] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [tour, setTour] = useFirstVisit(d.token)
   const current = d.folders.find((f) => f.id === d.folder) ?? null
-  const trail = useMemo(() => {
-    const out: { id: string; name: string }[] = []
-    for (let f = current; f; f = d.folders.find((x) => x.id === f!.parent) ?? null) out.unshift({ id: f.id, name: f.name })
-    return out
-  }, [current, d.folders])
   const href = (id: string | null) => (id ? `?folder=${id}` : "?")
   const sent = uploads.tasks.filter((t) => t.state === "done").length
   const subfolders = useMemo(() => d.folders.filter((f) => f.parent === d.folder), [d.folders, d.folder])
+  const trail = useMemo(() => {
+    const out: RFolder[] = []
+    for (let f = current; f; f = d.folders.find((x) => x.id === f!.parent) ?? null) out.unshift(f)
+    return out
+  }, [current, d.folders])
+  const placeOf = (folder: string | null) => (folder === d.folder ? null : folder ? folderPath(d.folders, folder) : d.name)
+  const here = current?.name ?? d.name
 
   return (
-    <Shell>
+    <Shell onHelp={() => setTour(true)}>
       <div className="space-y-6">
-        <div className="space-y-2">
+        <section className="rounded-xl border bg-card p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{d.name}</h1>
             {d.scoped && <Badge variant="secondary">Folder of {d.collectionName}</Badge>}
           </div>
-          {d.description && <p className="max-w-3xl whitespace-pre-line text-muted-foreground">{d.description}</p>}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>Up to {formatBytes(d.maxFile)} per file</span>
+          {d.description && <p className="mt-2 max-w-3xl whitespace-pre-line text-muted-foreground">{d.description}</p>}
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            <span className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground">
+              <Upload className="size-3" /> Up to {formatBytes(d.maxFile)} per file
+            </span>
             {d.expires && (
-              <span>
-                Open until <When ts={d.expires} />
+              <span className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground">
+                <CalendarClock className="size-3" /> Open until <When ts={d.expires} />
+                {d.autoDelete ? ", then deleted" : ""}
               </span>
             )}
+            <span className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground">
+              {d.showFiles ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+              {d.showFiles ? "Shared: everyone sees all files" : "Private: only you and the owner see your files"}
+            </span>
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-          <aside className="hidden h-fit space-y-2 rounded-lg border bg-card p-2 lg:block">
-            <div className="flex items-center justify-between px-2 pt-1">
-              <h2 className="text-sm font-semibold">Folders</h2>
-              {d.here.create_folder && (
-                <Button variant="ghost" size="icon" className="size-7" aria-label="New folder" onClick={() => setNewFolder(true)}>
-                  <FolderPlus className="size-4" />
-                </Button>
-              )}
-            </div>
-            {d.folders.length === 0 ? <p className="px-2 pb-2 text-xs text-muted-foreground">Everything goes into {d.name}.</p> : <FolderTree folders={d.folders} current={d.folder} href={href} rootLabel={d.name} />}
+        <div className="grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+          <aside className="hidden h-fit rounded-lg border bg-card p-2 pt-3 lg:sticky lg:top-20 lg:block">
+            <FolderMenu d={d} href={href} />
           </aside>
 
-          <section className="min-w-0 space-y-4">
+          <section className="min-w-0 space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-                <Link to={href(null)} className="hover:text-foreground">
-                  {d.name}
-                </Link>
-                {trail.map((f, i) => (
-                  <span key={f.id} className="contents">
-                    <span>/</span>
-                    {i === trail.length - 1 ? (
-                      <span className="font-medium text-foreground">{f.name}</span>
-                    ) : (
-                      <Link to={href(f.id)} className="hover:text-foreground">
-                        {f.name}
-                      </Link>
-                    )}
-                  </span>
-                ))}
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+                  <Link to={href(null)} className="hover:text-foreground">
+                    {d.name}
+                  </Link>
+                  {trail.map((f, i) => (
+                    <span key={f.id} className="contents">
+                      <ChevronRight className="size-3.5" />
+                      {i === trail.length - 1 ? (
+                        <span className="font-medium text-foreground">{f.name}</span>
+                      ) : (
+                        <Link to={href(f.id)} className="hover:text-foreground">
+                          {f.name}
+                        </Link>
+                      )}
+                    </span>
+                  ))}
+                </div>
+                <Badge variant={d.here.upload ? "success" : "secondary"}>
+                  {d.here.upload ? <Upload /> : <Lock />}
+                  {d.here.upload ? `You can upload to ${here}` : `${here} is view only`}
+                </Badge>
               </div>
               <div className="flex gap-2">
                 {d.here.create_folder && (
@@ -252,19 +357,17 @@ function Open({ data: d }: { data: OpenData }) {
             </div>
 
             {subfolders.length > 0 && (
-              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                {subfolders.map((f) => (
-                  <li key={f.id}>
-                    <Link to={href(f.id)} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent">
-                      <Folder className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{f.name}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-muted-foreground">{d.folder ? `Folders in ${here}` : "Folders"}</h2>
+                <FolderCards folders={subfolders} counts={d.counts} href={(id) => href(id)} audience="recipient" />
+              </div>
             )}
 
-            <DropZone onFiles={(list) => uploads.add(list, d.folder, current?.name ?? d.name)} disabled={!d.here.upload} hint={d.here.upload ? <>Into {current?.name ?? d.name}. Up to {formatBytes(d.maxFile)} per file.</> : "This folder is read-only. Choose another folder."} />
+            <DropZone
+              onFiles={(list) => uploads.add(list, d.folder, here)}
+              disabled={!d.here.upload}
+              hint={d.here.upload ? <>Files go into {here}. Up to {formatBytes(d.maxFile)} each.</> : "This folder is view only. Choose a folder that accepts uploads."}
+            />
             <UploadList tasks={uploads.tasks} onCancel={uploads.cancel} onClear={uploads.clear} />
             {sent > 0 && !uploads.busy && (
               <div className="flex items-center gap-2 rounded-lg border border-green-600/30 bg-green-500/10 px-4 py-3 text-sm text-green-800 dark:text-green-300">
@@ -272,32 +375,45 @@ function Open({ data: d }: { data: OpenData }) {
               </div>
             )}
 
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold">Your files here</h2>
+            <div className="space-y-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="text-sm font-semibold">{d.showFiles ? `Files in ${here}` : `Your files in ${here}`}</h2>
+                <span className="text-xs text-muted-foreground">{d.files.length ? `${d.files.length}${d.more ? "+" : ""} file${d.files.length === 1 ? "" : "s"}, subfolders included` : ""}</span>
+              </div>
               {d.files.length === 0 ? (
-                <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">You have not sent anything to this folder yet. Only you and the collection's owner see the files you send.</p>
+                <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                  {d.showFiles ? "Nothing here yet." : "You have not sent anything here yet."} Files you add appear here with a preview.
+                </p>
               ) : (
-                <ul className="divide-y rounded-lg border bg-card">
+                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                   {d.files.map((f) => (
-                    <li key={f.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                      <FileIcon name={f.name} className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
-                      <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">{formatBytes(f.size)}</span>
-                      <span className="text-xs text-muted-foreground">
-                        <Ago ts={f.created} />
-                      </span>
-                      <Badge variant="success">Received</Badge>
+                    <li key={f.id} className="overflow-hidden rounded-lg border bg-card">
+                      <a href={`${base}/files/${f.id}/download`} download className="block" title={`Download ${f.name}`}>
+                        <div className="flex aspect-[4/3] items-center justify-center bg-muted/50">
+                          {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon name={f.name} className="size-10 text-muted-foreground" />}
+                        </div>
+                        <div className="space-y-0.5 p-2.5">
+                          <div className="truncate text-sm font-medium">{f.name}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {formatBytes(f.size)} · <Ago ts={f.created} />
+                          </div>
+                          {placeOf(f.folder) && <div className="truncate text-xs text-muted-foreground">in {placeOf(f.folder)}</div>}
+                          {d.showFiles && f.own && <div className="text-xs text-green-700 dark:text-green-400">Sent by you</div>}
+                        </div>
+                      </a>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
+
             <AgentHelp link={d.link} password={d.passwordSet} folder={d.folder ? folderPath(d.folders, d.folder, "/") : ""} collapsible className="bg-transparent" />
           </section>
         </div>
       </div>
 
-      <NewFolderDialog open={newFolder} onOpenChange={setNewFolder} parent={d.folder} parentName={current?.name ?? d.name} />
+      <RecipientTour token={d.token} name={d.name} description={d.description} maxFile={d.maxFile} canCreateFolders={d.folders.some((f) => f.permissions.create_folder) || d.permissionsTop.create_folder} seesAll={d.showFiles} open={tour} onOpenChange={setTour} />
+      <NewFolderDialog open={newFolder} onOpenChange={setNewFolder} parent={d.folder} parentName={here} />
       {current && <RenameDialog open={renaming} onOpenChange={setRenaming} folder={current} />}
     </Shell>
   )

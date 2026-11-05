@@ -47,7 +47,7 @@ const STEPS = [
   { id: "review", label: "Review" },
 ] as const
 
-type Review = { name: string; password: boolean; expires: string; quota: string; maxFile: string; folders: number; upload: boolean; createFolder: boolean; renameOwn: boolean }
+type Review = { name: string; password: boolean; autoDelete: boolean; expires: string; quota: string; maxFile: string; folders: number; upload: boolean; createFolder: boolean; renameOwn: boolean; showFiles: boolean }
 
 export default function NewCollection({ loaderData }: Route.ComponentProps) {
   const { storageLimit } = loaderData
@@ -73,6 +73,7 @@ export default function NewCollection({ loaderData }: Route.ComponentProps) {
       setReview({
         name: String(d.get("name") ?? ""),
         password: Boolean(d.get("password")),
+        autoDelete: d.get("auto_delete") === "on",
         expires: expires ? new Date(expires).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "Never",
         quota: formatBytes(Number(d.get("quota_mb")) * 1e6),
         maxFile: formatBytes(Number(d.get("max_file_mb")) * 1e6),
@@ -80,6 +81,7 @@ export default function NewCollection({ loaderData }: Route.ComponentProps) {
         upload: d.get("upload") === "on",
         createFolder: d.get("create_folder") === "on",
         renameOwn: d.get("rename_own") === "on",
+        showFiles: d.get("show_files") === "on",
       })
     }
     setStep(next)
@@ -158,13 +160,14 @@ export default function NewCollection({ loaderData }: Route.ComponentProps) {
                 {[
                   ["Name", review.name],
                   ["Password", review.password ? "Required" : "None, the link is enough"],
-                  ["Expires", review.expires],
+                  ["Expires", review.expires === "Never" ? "Never" : `${review.expires}${review.autoDelete ? ", then deleted with its files" : ""}`],
                   ["Storage limit", review.quota],
                   ["Maximum file size", review.maxFile],
                   ["Folders", review.folders ? `${review.folders} prepared` : "None"],
                   ["Uploads", review.upload ? "Accepted" : "Closed"],
                   ["Recipients create folders", review.createFolder ? "Yes" : "No"],
                   ["Recipients rename their folders", review.renameOwn ? "Yes" : "No"],
+                  ["Recipients see", review.showFiles ? "All files in their folders" : "Only their own files"],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 px-4 py-2.5">
                     <dt className="text-muted-foreground">{k}</dt>

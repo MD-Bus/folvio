@@ -28,7 +28,8 @@ curl -H "Accept: application/json" https://<your-worker>/s/<token>
 | PUT | `/share/<token>/uploads/<id>/parts/<n>` | Send part `n` (exactly `part_size` bytes; the last one is shorter) → `{partNumber, etag}` |
 | POST | `/share/<token>/uploads/<id>/complete` | `{parts: [{partNumber, etag}, ...]}` in order |
 | DELETE | `/share/<token>/uploads/<id>` | Cancel an upload in progress |
-| GET | `/share/<token>/files?folder=<path or id>` | The files *you* sent to that folder, newest first. `?q=` searches by name; `?after=<next>` pages |
+| GET | `/share/<token>/files?folder=<path or id>` | The files you can see in that folder (yours, or all when `show_files` is true), newest first. `&recursive=1` includes subfolders; `?q=` searches by name; `?after=<next>` pages |
+| GET | `/share/<token>/files/<id>/download`, `/preview` | Download a file you can see, or preview an image |
 | POST | `/share/<token>/folders` | `{name, parent: <path or id>}` where subfolder creation is allowed |
 | PATCH | `/share/<token>/folders/<id>` | `{name}`: rename a folder you created, where allowed |
 | POST | `/share/<token>/open` | `{password}`: open the link explicitly. Sets the browser cookie and returns `{recipient}` |
@@ -39,7 +40,7 @@ curl -H "Accept: application/json" https://<your-worker>/s/<token>
 
 **Folders** can be given by id or by path from the link's top, with `/` between names and case ignored: `Branding/Logos`. For a folder link, the top is that folder. Empty means the top. Unknown paths answer 404.
 
-**Permissions** are those of a person with the link: hidden folders do not exist, closed folders refuse uploads (403), and nothing can be downloaded, moved or deleted.
+**Permissions** are those of a person with the link: hidden folders do not exist, closed folders refuse uploads (403), only the caller's own files can be opened (or all files of visible folders when `show_files` is true), and nothing can be moved or deleted.
 
 ```bash
 # one-request upload, then list what this program sent
@@ -77,7 +78,7 @@ await fetch(`${base}/uploads/${init.id}/complete`, { method: "POST", headers, bo
 | POST | `/collections/<id>/folders` | `{name, parent: <path or id, or null>}` |
 | PATCH | `/collections/<id>/folders/<folder>` | `{name, parent, hidden, upload, create_folder, rename_own}`: `true`, `false` or `null` (inherit) |
 | DELETE | `/collections/<id>/folders/<folder>` | Delete an empty folder (409 otherwise) and its folder links |
-| GET | `/collections/<id>/files?folder=<path or id>&q=&after=` | All files in a folder (or matching `q` anywhere), newest first, with `uploader` |
+| GET | `/collections/<id>/files?folder=<path or id>&recursive=1&q=&after=` | All files in a folder (with `recursive=1`, its subfolders too; or matching `q` anywhere), newest first, with `uploader` |
 | GET | `/collections/<id>/files/<file>` | One file's details |
 | PATCH | `/collections/<id>/files/<file>` | `{name}` and/or `{folder}` (move) |
 | DELETE | `/collections/<id>/files/<file>` | Delete the file and its stored contents |
@@ -100,6 +101,8 @@ await fetch(`${base}/uploads/${init.id}/complete`, { method: "POST", headers, bo
 | `upload` | boolean | `true` | Recipients may upload |
 | `create_folder` | boolean | `false` | Recipients may create subfolders |
 | `rename_own` | boolean | `false` | Recipients may rename folders they created |
+| `show_files` | boolean | `false` | Recipients see, preview and download every file in the folders they can open, not only theirs |
+| `auto_delete` | boolean | `false` | Needs `expires`: the collection and all its files are deleted within an hour after it expires |
 | `folders` | array | `[]` | POST only: `[{id, name, parent}]` with ids of your choice, parents referring to those ids |
 
 Folder overrides inherit from the nearest folder above that sets them, then from the collection. A hidden folder hides everything below it, whatever the overrides say. Changes to folders are serialised: a request made against a collection that changed meanwhile answers 409; reload and retry.

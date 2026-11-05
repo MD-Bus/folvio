@@ -48,6 +48,9 @@ export function FileBrowser({
   rootLabel,
   query,
   folder,
+  recursive = false,
+  toolbar,
+  emptyText,
 }: {
   files: BrowserFile[]
   next: string | null
@@ -56,6 +59,10 @@ export function FileBrowser({
   rootLabel: string
   query: string
   folder: string | null
+  /** The files of the folder and of its subfolders: each file from a subfolder says where it is. */
+  recursive?: boolean
+  toolbar?: React.ReactNode
+  emptyText?: string
 }) {
   const [view, setView] = useState<"grid" | "list">("grid")
   const [more, setMore] = useState<BrowserFile[]>([])
@@ -106,6 +113,7 @@ export function FileBrowser({
       const params = new URLSearchParams({ after: next })
       if (query) params.set("q", query)
       else if (folder) params.set("folder", folder)
+      if (recursive) params.set("recursive", "1")
       const res = await fetch(`${apiBase}/files?${params}`)
       const page = (await res.json()) as { files: BrowserFile[]; next: string | null }
       if (res.ok) {
@@ -117,6 +125,8 @@ export function FileBrowser({
     }
   }
   const pathOf = (id: string | null) => (id ? folderPath(folders, id) : rootLabel)
+  /** Where a file is, when it is not directly in the open folder (search results, or everything inside). */
+  const placeOf = (f: BrowserFile) => (query || (recursive && f.folder !== folder) ? pathOf(f.folder) : null)
   const allSelected = files.length > 0 && files.every((f) => selected.has(f.id))
 
   const menu = (f: BrowserFile) => (
@@ -163,7 +173,9 @@ export function FileBrowser({
             </Button>
           </>
         )}
-        <div className="ml-auto flex rounded-md border p-0.5">
+        <div className="ml-auto flex items-center gap-2">
+        {toolbar}
+        <div className="flex rounded-md border p-0.5">
           <Button variant={view === "grid" ? "secondary" : "ghost"} size="icon" className="size-7" aria-label="Grid view" aria-pressed={view === "grid"} onClick={() => switchView("grid")}>
             <LayoutGrid className="size-4" />
           </Button>
@@ -171,12 +183,13 @@ export function FileBrowser({
             <List className="size-4" />
           </Button>
         </div>
+        </div>
       </div>
 
       {files.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center text-sm text-muted-foreground">
           <Upload className="size-6" />
-          {query ? `No file is named like "${query}".` : "No files in this folder yet."}
+          {query ? `No file is named like "${query}".` : (emptyText ?? "No files in this folder yet.")}
         </div>
       ) : view === "grid" ? (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
@@ -204,7 +217,7 @@ export function FileBrowser({
                   <div className="truncate text-xs text-muted-foreground">
                     {formatBytes(f.size)} · <Ago ts={f.created} />
                   </div>
-                  {query && <div className="truncate text-xs text-muted-foreground">in {pathOf(f.folder)}</div>}
+                  {placeOf(f) && <div className="truncate text-xs text-muted-foreground">in {placeOf(f)}</div>}
                 </div>
                 {menu(f)}
               </div>
@@ -237,9 +250,9 @@ export function FileBrowser({
                         {f.name}
                       </a>
                     </div>
-                    {query && (
+                    {placeOf(f) && (
                       <Link to={`?folder=${f.folder ?? ""}`} className="ml-6 block truncate text-xs text-muted-foreground hover:underline">
-                        {pathOf(f.folder)}
+                        {placeOf(f)}
                       </Link>
                     )}
                   </TableCell>

@@ -6,7 +6,9 @@ Run locally with Node 22, Chromium (Playwright) and the Cloudflare Workers runti
 
 ### Passing checks
 
-- `npm run typecheck`, `npm run build` and `npm test` (13 tests: migrations, permissions, collections, folders, uploads, passwords, folder links, admin API, links used by programs, clean-up), on SQLite with an R2 stand-in.
+- `npm run typecheck`, `npm run build` and `npm test` (15 tests: migrations, permissions, collections, folders, uploads, passwords, folder links, admin API, links used by programs, recursive listings and file visibility, auto-delete, clean-up), on SQLite with an R2 stand-in.
+- The Cloudflare Workers Build of `main` passes (after naming `folvio-db` and `folvio-files` so leftovers of an earlier install are reused).
+- The scheduled handler, triggered in the Workers runtime, deleted an expired auto-delete collection with its file and kept the others.
 - `wrangler deploy --dry-run`: bindings `DB` and `FILES` without ids or names (provisioned on deploy), cron trigger, 348 KB gzipped.
 - A fresh local database is created and migrated by the Worker on its first request (no `wrangler d1 migrations apply`), including the trigger statements of 0002.
 - A 22-step browser run passed against both the development server and the production build (`vite preview`, real CSP with nonces), on a clean database each time:
@@ -17,7 +19,8 @@ Run locally with Node 22, Chromium (Playwright) and the Cloudflare Workers runti
   - folder link limited to its folder (siblings absent), upload through it;
   - password set: recipients signed out, wrong password refused, right password accepted;
   - API key created and used; invalid key refused (401); collections created through the API;
-  - overview, collections list, ⌘K search, dark theme, phone width without horizontal scrolling; revoked folder link answers 404.
+  - overview, collections list, ⌘K search, dark theme, phone width without horizontal scrolling; revoked folder link answers 404;
+  - the root shows folder cards and the files of every subfolder ("This folder only" shows none); the recipient tour (Next, Back, finish; not shown again after a reload; Skip on another link); a recipient sees a loading preview of an image they sent; expiry with auto-delete saved and shown.
 - Links used by programs, with `curl` against the production build: JSON manifest from `/s/<token>` with `Accept: application/json`; `Link` header on the HTML page; a 40 MiB file uploaded in one `PUT` into `Branding/Logos` by path; `X-Folvio-Recipient` issued once and accepted; another program sees none of those files; a missing file name is explained.
 
 ### Not yet verified
