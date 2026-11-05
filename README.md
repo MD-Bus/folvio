@@ -3,7 +3,7 @@
 <h1 align="center">Folvio</h1>
 
 <p align="center">
-Self-hosted file collections on Cloudflare Workers, D1 and R2.<br>
+Self-hosted file collections on Cloudflare Workers, D1 and R2, for any kind of file.<br>
 Prepare the folders. Share one link. Receive every file in the right place.<br>
 People upload from the browser; programs and AI agents use the same link.
 </p>
@@ -29,7 +29,7 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 ├── Branding/
 │   ├── Brand guidelines/
 │   └── Logos/                    ← its own link, if you want: only this folder
-├── Documents/                    uploads closed, subfolders allowed
+├── Documents/                    uploads closed
 ├── Images/
 │   ├── Homepage/
 │   └── Team photos/
@@ -49,9 +49,9 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 - A five-step wizard with folder templates (website project, photo shoot, client onboarding, event) and an editable nested tree.
 - Stable, random links. Optional password, expiry date, storage limit and maximum file size per collection. Replace the link at any time if it reached the wrong people.
 - **Auto-delete at expiry**: optionally, the collection deletes itself with all its files once its expiry date has passed (the hourly clean-up does it, in bounded batches).
-- Per-folder overrides for upload, subfolder creation and renaming (allow, deny or inherit), and hidden folders whose whole subtree disappears for recipients.
+- Per-folder overrides for uploads and renaming (allow, deny or inherit), and hidden folders whose whole subtree disappears for recipients.
 - **Folder links**: a link that opens one folder and what is inside it, never its neighbours, revocable on its own.
-- Recipient folder creation is **off by default**, so files land in the structure you prepared. Recipients can never move or delete folders.
+- Recipient folder creation is **off by default**, so files land in the structure you prepared. When on, recipients only create top-level folders, never folders inside folders, and they can never move or delete folders.
 
 **Received files**
 - A folder shows its subfolders as cards and **everything inside it**, subfolders included, so the root is never empty (switch to *This folder only* when you want).
@@ -82,7 +82,7 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 
 ## What recipients see
 
-A clean page with your instructions, a folder menu that says where to put files (with counts, and a lock on view-only folders), folder cards, a drop area and **previews of the images they sent**. On their first visit a short tour (Next, Back, **Skip**) explains it in three steps; *How it works* opens it again.
+A clean page with your instructions, a folder menu that says where to put files (with counts, and a lock on view-only folders), folder cards, a drop area that takes any kind of file (documents, images, videos, ZIP archives...) and **the files they sent**: images with a preview, everything else with its file type. On their first visit a short tour (Next, Back, **Skip**) explains it in three steps; *How it works* opens it again.
 
 By default each recipient only sees, previews and downloads the files they sent, never other recipients' files, and never hidden folders. Turn on **Recipients see all files** for a team collection where everyone with the link should see everything in the folders they can open.
 

@@ -277,8 +277,12 @@ export type VisibleFolder = ReturnType<typeof visibleFolders>[number]
 /** For a recipient on a folder link, the link's folder is their root: null means that folder. */
 export const resolveFolder = (access: Access, folder: string | null | undefined) => (folder ? folder : access.admin ? null : access.c.folder_root)
 
+/**
+ * Creates a folder. The administrator chooses where; a recipient's folder always goes to the top level of what their
+ * link opens (nested folders made by recipients only confuse the structure the administrator prepared).
+ */
 export async function createFolder(env: Env, access: Access, input: { name?: unknown; parent?: unknown }): Promise<string> {
-  const parent = resolveFolder(access, typeof input.parent === "string" ? input.parent : null)
+  const parent = access.admin ? resolveFolder(access, typeof input.parent === "string" ? input.parent : null) : access.c.folder_root
   authorize(access, parent, "create_folder")
   const name = wrapFolderErrors(() => cleanFolderName(input.name))
   if (access.folders.length >= MAX_FOLDERS) fail(409, `A collection holds at most ${MAX_FOLDERS} folders.`)

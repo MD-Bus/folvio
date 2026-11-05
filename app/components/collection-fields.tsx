@@ -99,7 +99,12 @@ export function PermissionFields({ values }: { values: SettingsValues }) {
   return (
     <div className="grid gap-3">
       <SwitchRow name="upload" label="Accept uploads" description="Recipients can upload files into the folders they see. Turn off to close the collection without deleting anything." defaultChecked={values.upload} />
-      <SwitchRow name="create_folder" label="Recipients can create folders" description="Off by default, so files land in the structure you prepared." defaultChecked={values.create_folder} />
+      <SwitchRow
+        name="create_folder"
+        label="Recipients can create folders"
+        description="Off by default, so files land in the structure you prepared. When on, their folders are always created at the top level, never inside another folder."
+        defaultChecked={values.create_folder}
+      />
       <SwitchRow name="rename_own" label="Recipients can rename their own folders" description="Only folders they created themselves, from the same browser. Recipients can never move or delete folders." defaultChecked={values.rename_own} />
       <SwitchRow
         name="show_files"

@@ -333,3 +333,23 @@ test("collections set to auto-delete are removed with their files once expired; 
   assert.equal(raw.prepare("SELECT count(*) AS n FROM folder_links").get()!.n, 0)
   assert.equal(objects.size, 1, "only the kept collection's file remains")
 })
+
+test("recipients only create top-level folders, whatever parent they ask for", async () => {
+  const { env } = makeEnv()
+  const { id, token } = await createCollection(env, { name: "C", create_folder: true }, [{ id: "a", name: "Images", parent: null }])
+  const admin = await adminAccess(env, id)
+  const images = admin.folders[0].id
+  const { cookie } = await openShare(new Request("https://x.test/"), env, admin.c, "")
+  const r = await recipientAccess(new Request("https://x.test/", { headers: { cookie: cookie.split(";")[0] } }), env, token)
+  const made = await createFolder(env, r, { name: "Mine", parent: images })
+  assert.equal((await adminAccess(env, id)).folders.find((f) => f.id === made)!.parent, null)
+  // the administrator still nests
+  const nested = await createFolder(env, await adminAccess(env, id), { name: "Sub", parent: images })
+  assert.equal((await adminAccess(env, id)).folders.find((f) => f.id === nested)!.parent, images)
+  // through a folder link, the top level is the link's folder
+  const link = await createLink(env, await adminAccess(env, id), images)
+  const { cookie: c2 } = await openShare(new Request("https://x.test/"), env, (await adminAccess(env, id)).c, "")
+  const scoped = await recipientAccess(new Request("https://x.test/", { headers: { cookie: c2.split(";")[0] } }), env, link.token)
+  const inLink = await createFolder(env, scoped, { name: "Linked", parent: null })
+  assert.equal((await adminAccess(env, id)).folders.find((f) => f.id === inLink)!.parent, images)
+})

@@ -4,7 +4,7 @@ import { CalendarClock, ChevronRight, CircleCheck, CircleHelp, Eye, EyeOff, Fold
 import { useTheme } from "next-themes"
 import type { Route } from "./+types/share"
 import { AgentHelp } from "#/components/agent-help"
-import { FileIcon } from "#/components/file-icon"
+import { FileTypeTile } from "#/components/file-icon"
 import { FolderCards } from "#/components/folder-cards"
 import { RecipientTour, useFirstVisit } from "#/components/recipient-tour"
 import { NewFolderDialog } from "#/components/folder-dialogs"
@@ -343,7 +343,7 @@ function Open({ data: d }: { data: OpenData }) {
                 </Badge>
               </div>
               <div className="flex gap-2">
-                {d.here.create_folder && (
+                {d.permissionsTop.create_folder && (
                   <Button variant="outline" size="sm" onClick={() => setNewFolder(true)}>
                     <FolderPlus /> New folder
                   </Button>
@@ -366,7 +366,7 @@ function Open({ data: d }: { data: OpenData }) {
             <DropZone
               onFiles={(list) => uploads.add(list, d.folder, here)}
               disabled={!d.here.upload}
-              hint={d.here.upload ? <>Files go into {here}. Up to {formatBytes(d.maxFile)} each.</> : "This folder is view only. Choose a folder that accepts uploads."}
+              hint={d.here.upload ? <>Any kind of file (documents, images, videos, ZIP archives...) goes into {here}. Up to {formatBytes(d.maxFile)} each.</> : "This folder is view only. Choose a folder that accepts uploads."}
             />
             <UploadList tasks={uploads.tasks} onCancel={uploads.cancel} onClear={uploads.clear} />
             {sent > 0 && !uploads.busy && (
@@ -382,7 +382,7 @@ function Open({ data: d }: { data: OpenData }) {
               </div>
               {d.files.length === 0 ? (
                 <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                  {d.showFiles ? "Nothing here yet." : "You have not sent anything here yet."} Files you add appear here with a preview.
+                  {d.showFiles ? "Nothing here yet." : "You have not sent anything here yet."} Files you add appear here: images with a preview, every other file with its type.
                 </p>
               ) : (
                 <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -390,7 +390,7 @@ function Open({ data: d }: { data: OpenData }) {
                     <li key={f.id} className="overflow-hidden rounded-lg border bg-card">
                       <a href={`${base}/files/${f.id}/download`} download className="block" title={`Download ${f.name}`}>
                         <div className="flex aspect-[4/3] items-center justify-center bg-muted/50">
-                          {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon name={f.name} className="size-10 text-muted-foreground" />}
+                          {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileTypeTile name={f.name} />}
                         </div>
                         <div className="space-y-0.5 p-2.5">
                           <div className="truncate text-sm font-medium">{f.name}</div>
@@ -412,8 +412,8 @@ function Open({ data: d }: { data: OpenData }) {
         </div>
       </div>
 
-      <RecipientTour token={d.token} name={d.name} description={d.description} maxFile={d.maxFile} canCreateFolders={d.folders.some((f) => f.permissions.create_folder) || d.permissionsTop.create_folder} seesAll={d.showFiles} open={tour} onOpenChange={setTour} />
-      <NewFolderDialog open={newFolder} onOpenChange={setNewFolder} parent={d.folder} parentName={here} />
+      <RecipientTour token={d.token} name={d.name} description={d.description} maxFile={d.maxFile} canCreateFolders={d.permissionsTop.create_folder} seesAll={d.showFiles} open={tour} onOpenChange={setTour} />
+      <NewFolderDialog open={newFolder} onOpenChange={setNewFolder} parent={null} parentName={d.name} note="New folders are created at the top level, next to the others." />
       {current && <RenameDialog open={renaming} onOpenChange={setRenaming} folder={current} />}
     </Shell>
   )

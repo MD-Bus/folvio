@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useFetcher } from "react-router"
 import { Download, FolderInput, LayoutGrid, List, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react"
-import { FileIcon } from "#/components/file-icon"
+import { FileIcon, FileTypeTile } from "#/components/file-icon"
 import { Ago } from "#/components/time"
 import { Button } from "#/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#/components/ui/dialog"
@@ -199,7 +199,7 @@ export function FileBrowser({
                 {canPreview(f.name, f.size) ? (
                   <img src={`${apiBase}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" />
                 ) : (
-                  <FileIcon name={f.name} className="size-10 text-muted-foreground" />
+                  <FileTypeTile name={f.name} />
                 )}
                 <input
                   type="checkbox"

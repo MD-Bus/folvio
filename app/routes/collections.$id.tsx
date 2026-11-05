@@ -327,7 +327,7 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q, scope
                   ) : (
                     <>
                       <Badge variant={here.upload ? "success" : "secondary"}>{here.upload ? "Recipients can upload" : "Uploads closed"}</Badge>
-                      {here.create_folder && <Badge variant="info">Recipients can create folders</Badge>}
+                      {folder === null && here.create_folder && <Badge variant="info">Recipients can create top-level folders</Badge>}
                       {here.rename_own && <Badge variant="info">Recipients can rename their folders</Badge>}
                     </>
                   )}

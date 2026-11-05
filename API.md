@@ -30,7 +30,7 @@ curl -H "Accept: application/json" https://<your-worker>/s/<token>
 | DELETE | `/share/<token>/uploads/<id>` | Cancel an upload in progress |
 | GET | `/share/<token>/files?folder=<path or id>` | The files you can see in that folder (yours, or all when `show_files` is true), newest first. `&recursive=1` includes subfolders; `?q=` searches by name; `?after=<next>` pages |
 | GET | `/share/<token>/files/<id>/download`, `/preview` | Download a file you can see, or preview an image |
-| POST | `/share/<token>/folders` | `{name, parent: <path or id>}` where subfolder creation is allowed |
+| POST | `/share/<token>/folders` | `{name}` when `permissions.create_folder` is true: the folder is created at the top level of the link (recipients never create folders inside folders) |
 | PATCH | `/share/<token>/folders/<id>` | `{name}`: rename a folder you created, where allowed |
 | POST | `/share/<token>/open` | `{password}`: open the link explicitly. Sets the browser cookie and returns `{recipient}` |
 

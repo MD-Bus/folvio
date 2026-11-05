@@ -21,7 +21,7 @@ function useDone(fetcher: ReturnType<typeof useFetcher<{ ok?: boolean; error?: s
 }
 
 /** Creates a folder inside `parent` (null: the root). Posts `create_folder` to the page's action. */
-export function NewFolderDialog({ open, onOpenChange, parentName, parent }: { open: boolean; onOpenChange: (open: boolean) => void; parentName: string; parent: string | null }) {
+export function NewFolderDialog({ open, onOpenChange, parentName, parent, note }: { open: boolean; onOpenChange: (open: boolean) => void; parentName: string; parent: string | null; note?: string }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>()
   useDone(fetcher, () => onOpenChange(false))
   return (
@@ -29,7 +29,7 @@ export function NewFolderDialog({ open, onOpenChange, parentName, parent }: { op
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New folder</DialogTitle>
-          <DialogDescription>Inside {parentName}.</DialogDescription>
+          <DialogDescription>{note ?? `Inside ${parentName}.`}</DialogDescription>
         </DialogHeader>
         <fetcher.Form method="post" className="grid gap-4" key={String(open)}>
           <input type="hidden" name="intent" value="create_folder" />
@@ -128,7 +128,7 @@ export function ManageFolderDialog({
             </div>
             <div className="grid gap-3 rounded-lg border p-3">
               <p className="text-sm font-medium">Recipient permissions</p>
-              {PERMISSIONS.map((key) => (
+              {PERMISSIONS.filter((key) => key !== "create_folder").map((key) => (
                 <div key={key} className="flex items-center justify-between gap-4">
                   <FieldLabel htmlFor={`mf-${key}`} help={key === "rename_own" ? "Recipients can only ever rename folders they created themselves." : undefined}>
                     {PERMISSION_LABELS[key]}

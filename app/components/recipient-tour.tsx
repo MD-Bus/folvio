@@ -60,7 +60,7 @@ export function RecipientTour({
       title: "2. Add your files",
       body: (
         <p>
-          Drag files onto the drop area, or press <strong>Choose files</strong>. You can send several at once, up to {formatBytes(maxFile)} each. Keep the page open until every file shows a green check.
+          Drag files onto the drop area, or press <strong>Choose files</strong>. Any kind of file works: documents, images, videos, ZIP archives. You can send several at once, up to {formatBytes(maxFile)} each. Keep the page open until every file shows a green check.
         </p>
       ),
     },
@@ -69,7 +69,7 @@ export function RecipientTour({
           {
             icon: FolderPlus,
             title: "Need another folder?",
-            body: <p>Where it is allowed, press <strong>New folder</strong> to make one inside the folder you are in, then add files to it.</p>,
+            body: <p>Press <strong>New folder</strong> to add one next to the other folders, then open it and add your files.</p>,
           },
         ]
       : []),
@@ -77,10 +77,10 @@ export function RecipientTour({
       icon: Eye,
       title: "3. Check what you sent",
       body: seesAll ? (
-        <p>Each folder shows its files with previews of images, including what others sent. Click a file to download it.</p>
+        <p>Each folder shows its files, including what others sent: images with a preview, other files with their type. Click a file to download it.</p>
       ) : (
         <p>
-          Each folder shows the files <strong>you</strong> sent, with previews of images. Others who have this link do not see your files, and you do not see theirs. The owner of the collection receives everything.
+          Each folder shows the files <strong>you</strong> sent: images with a preview, other files with their type. Others who have this link do not see your files, and you do not see theirs. The owner of the collection receives everything.
         </p>
       ),
     },
