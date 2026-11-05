@@ -14,6 +14,7 @@ A full rebuild on the stack and dashboard of [Warden](https://github.com/momardi
 - Upload queue with drag and drop, progress per file, cancel, a retry per part, and a warning before leaving the page.
 - Recipient page: instructions, a folder menu saying where to put files (counts, view-only folders), folder cards, previews of the images they sent, a first-visit tour with Next, Back and Skip ("How it works" reopens it), password page, expired page, phone layout.
 - Folders show their subfolders as cards and everything inside them, subfolders included (admin and recipients); `recursive=1` in the API. Admins can switch to "This folder only".
+- List and image views with a thumbnail size slider. The dashboard starts in the image view, the recipient page in the list; each browser remembers the choice.
 - Download a folder, or the whole collection, as a ZIP with its subfolders. The browser builds the archive (stored entries, UTF-8 names, CRC-32 while streaming), written to disk in Chrome and Edge above 500 MB; `GET /collections/<id>/archive` lists the entries.
 - Recipients' folders are always created at the top level of their link, never inside another folder; the per-folder "Create subfolders" override is gone from the dashboard. The administrator still prepares nested folders.
 - Option "Recipients see all files" (`show_files`): everyone with the link sees, previews and downloads all files of the folders they can open. Off by default.

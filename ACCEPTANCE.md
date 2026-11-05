@@ -6,7 +6,7 @@ Run locally with Node 22, Chromium (Playwright) and the Cloudflare Workers runti
 
 ### Passing checks
 
-- `npm run typecheck`, `npm run build` and `npm test` (17 tests: ZIP writer checked with Python's zipfile, migrations, permissions, collections, folders, uploads, passwords, folder links, admin API, links used by programs, recursive listings and file visibility, auto-delete, clean-up), on SQLite with an R2 stand-in.
+- `npm run typecheck`, `npm run build` and `npm test` (19 tests: SVG with a script accepted but never previewed and only served as a sandboxed attachment, ZIP writer checked with Python's zipfile, migrations, permissions, collections, folders, uploads, passwords, folder links, admin API, links used by programs, recursive listings and file visibility, auto-delete, clean-up), on SQLite with an R2 stand-in.
 - The Cloudflare Workers Build of `main` passes (after naming `folvio-db` and `folvio-files` so leftovers of an earlier install are reused).
 - The scheduled handler, triggered in the Workers runtime, deleted an expired auto-delete collection with its file and kept the others.
 - `wrangler deploy --dry-run`: bindings `DB` and `FILES` without ids or names (provisioned on deploy), cron trigger, 348 KB gzipped.

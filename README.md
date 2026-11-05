@@ -55,7 +55,7 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 
 **Received files**
 - A folder shows its subfolders as cards and **everything inside it**, subfolders included, so the root is never empty (switch to *This folder only* when you want).
-- Grid view with image previews, or list view; search across the whole collection; select, move, rename, delete and download.
+- Image view with previews and a size slider (small thumbnails, many per row, up to large ones), or list view; search across the whole collection; select, move, rename, delete and download. The dashboard opens in the image view, recipients in the list; each browser remembers its choice.
 - **Download a folder as a ZIP**, subfolders and empty folders included, or the whole collection with *Download all as ZIP*. Your browser builds the archive while it streams each file, so the Worker stays within the free plan's CPU limit; in Chrome and Edge, folders over 500 MB are written straight to disk. Up to 4 GB per archive.
 - Per-folder file counts, storage use per collection and for the installation, last-upload times.
 - An overview with open collections, files received, storage against the limit, uploads in progress and a 30-day chart.
@@ -191,7 +191,7 @@ Folvio runs on Workers Free, D1 and R2 Standard: no paid Workers plan, Queues or
 
 - Admin sessions are opaque random tokens stored as hashes in D1; a password change logs every session out. Logins and link passwords are throttled per address.
 - Permissions are enforced by the Worker on every request, including every upload part: inherited overrides, hidden ancestors, folder-link scope, ownership of uploads.
-- Recipients and programs only see their own uploads, unless you turn on *Recipients see all files*. Downloads are attachments; image previews are limited to raster formats (never SVG or HTML).
+- Recipients and programs only see their own uploads, unless you turn on *Recipients see all files*. Any file type is accepted, SVG and HTML included, but they are never previewed or rendered: previews are limited to PNG, JPEG, GIF, WebP and AVIF, and every download is a sandboxed `application/octet-stream` attachment.
 - Files are **not** scanned for malware. Treat received files as untrusted.
 
 See [SECURITY.md](SECURITY.md) for the full model and its limits.

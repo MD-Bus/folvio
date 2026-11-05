@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useFetcher } from "react-router"
-import { Download, FolderInput, LayoutGrid, List, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react"
+import { Download, FolderInput, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react"
 import { FileIcon, FileTypeTile } from "#/components/file-icon"
+import { gridStyle, useFileView, ViewControls } from "#/components/view-controls"
 import { Ago } from "#/components/time"
 import { Button } from "#/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#/components/ui/dialog"
@@ -18,7 +19,6 @@ export type BrowserFile = { id: string; name: string; size: number; created: num
 type FolderOption = { id: string; parent: string | null; name: string }
 type Dialogs = { kind: "rename"; file: BrowserFile } | { kind: "move"; ids: string[] } | { kind: "delete"; ids: string[] } | null
 
-const VIEW_KEY = "folvio:file-view"
 
 /** The folder choices of a select: the root, then every folder indented by depth. */
 export function FolderSelectOptions({ folders, rootLabel, exclude }: { folders: FolderOption[]; rootLabel: string; exclude?: Set<string> }) {
@@ -64,7 +64,9 @@ export function FileBrowser({
   toolbar?: React.ReactNode
   emptyText?: string
 }) {
-  const [view, setView] = useState<"grid" | "list">("grid")
+  // The administrator starts in the image view; recipients start in the list.
+  const viewState = useFileView("admin", "grid")
+  const { view, tile } = viewState
   const [more, setMore] = useState<BrowserFile[]>([])
   const [next, setNext] = useState(firstNext)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -73,12 +75,6 @@ export function FileBrowser({
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>()
   const busy = fetcher.state !== "idle"
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(VIEW_KEY)
-      if (saved === "list" || saved === "grid") setView(saved)
-    } catch {}
-  }, [])
   // A new first page (another folder, a search, or a reload after a change) replaces what was loaded.
   useEffect(() => {
     setMore([])
@@ -93,12 +89,6 @@ export function FileBrowser({
   }, [fetcher.state, fetcher.data])
 
   const files = useMemo(() => [...firstPage, ...more.filter((m) => !firstPage.some((f) => f.id === m.id))], [firstPage, more])
-  const switchView = (v: "grid" | "list") => {
-    setView(v)
-    try {
-      localStorage.setItem(VIEW_KEY, v)
-    } catch {}
-  }
   const toggle = (id: string) =>
     setSelected((prev) => {
       const s = new Set(prev)
@@ -175,14 +165,7 @@ export function FileBrowser({
         )}
         <div className="ml-auto flex items-center gap-2">
         {toolbar}
-        <div className="flex rounded-md border p-0.5">
-          <Button variant={view === "grid" ? "secondary" : "ghost"} size="icon" className="size-7" aria-label="Grid view" aria-pressed={view === "grid"} onClick={() => switchView("grid")}>
-            <LayoutGrid className="size-4" />
-          </Button>
-          <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" className="size-7" aria-label="List view" aria-pressed={view === "list"} onClick={() => switchView("list")}>
-            <List className="size-4" />
-          </Button>
-        </div>
+        <ViewControls {...viewState} />
         </div>
       </div>
 
@@ -192,7 +175,7 @@ export function FileBrowser({
           {query ? `No file is named like "${query}".` : (emptyText ?? "No files in this folder yet.")}
         </div>
       ) : view === "grid" ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <ul className="grid gap-3" style={gridStyle(tile)}>
           {files.map((f) => (
             <li key={f.id} className={cn("group relative overflow-hidden rounded-lg border bg-card transition-shadow", selected.has(f.id) && "ring-2 ring-primary")}>
               <div className="relative flex aspect-[4/3] items-center justify-center bg-muted/50">
@@ -209,14 +192,16 @@ export function FileBrowser({
                   aria-label={`Select ${f.name}`}
                 />
               </div>
-              <div className="flex items-start gap-1 p-2.5">
+              <div className={cn("flex items-start gap-1", tile < 160 ? "p-1.5" : "p-2.5")}>
                 <div className="min-w-0 flex-1">
                   <a href={`${apiBase}/files/${f.id}/download`} download className="block truncate text-sm font-medium hover:underline" title={f.name}>
                     {f.name}
                   </a>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {formatBytes(f.size)} · <Ago ts={f.created} />
-                  </div>
+                  {tile >= 160 && (
+                    <div className="truncate text-xs text-muted-foreground">
+                      {formatBytes(f.size)} · <Ago ts={f.created} />
+                    </div>
+                  )}
                   {placeOf(f) && <div className="truncate text-xs text-muted-foreground">in {placeOf(f)}</div>}
                 </div>
                 {menu(f)}

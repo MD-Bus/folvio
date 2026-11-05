@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { data, Link, redirect, useFetcher, useNavigation, useRevalidator } from "react-router"
-import { CalendarClock, ChevronRight, CircleCheck, CircleHelp, Eye, EyeOff, Folder, FolderOpen, FolderPlus, Lock, Moon, Pencil, Sun, Upload } from "lucide-react"
+import { CalendarClock, ChevronRight, CircleCheck, CircleHelp, Download, Eye, EyeOff, Folder, FolderOpen, FolderPlus, Lock, Moon, Pencil, Sun, Upload } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { Route } from "./+types/share"
 import { AgentHelp } from "#/components/agent-help"
-import { FileTypeTile } from "#/components/file-icon"
+import { FileIcon, FileTypeTile } from "#/components/file-icon"
+import { gridStyle, useFileView, ViewControls } from "#/components/view-controls"
 import { FolderCards } from "#/components/folder-cards"
 import { RecipientTour, useFirstVisit } from "#/components/recipient-tour"
 import { NewFolderDialog } from "#/components/folder-dialogs"
@@ -285,6 +286,8 @@ function Open({ data: d }: { data: OpenData }) {
   }, [current, d.folders])
   const placeOf = (folder: string | null) => (folder === d.folder ? null : folder ? folderPath(d.folders, folder) : d.name)
   const here = current?.name ?? d.name
+  // Recipients start with the list; the administrator starts with the images.
+  const fileView = useFileView("recipient", "list")
 
   return (
     <Shell onHelp={() => setTour(true)}>
@@ -376,34 +379,19 @@ function Open({ data: d }: { data: OpenData }) {
             )}
 
             <div className="space-y-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold">{d.showFiles ? `Files in ${here}` : `Your files in ${here}`}</h2>
-                <span className="text-xs text-muted-foreground">{d.files.length ? `${d.files.length}${d.more ? "+" : ""} file${d.files.length === 1 ? "" : "s"}, subfolders included` : ""}</span>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold">{d.showFiles ? `Files in ${here}` : `Your files in ${here}`}</h2>
+                  <p className="text-xs text-muted-foreground">{d.files.length ? `${d.files.length}${d.more ? "+" : ""} file${d.files.length === 1 ? "" : "s"}, subfolders included` : ""}</p>
+                </div>
+                {d.files.length > 0 && <ViewControls {...fileView} />}
               </div>
               {d.files.length === 0 ? (
                 <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
                   {d.showFiles ? "Nothing here yet." : "You have not sent anything here yet."} Files you add appear here: images with a preview, every other file with its type.
                 </p>
               ) : (
-                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                  {d.files.map((f) => (
-                    <li key={f.id} className="overflow-hidden rounded-lg border bg-card">
-                      <a href={`${base}/files/${f.id}/download`} download className="block" title={`Download ${f.name}`}>
-                        <div className="flex aspect-[4/3] items-center justify-center bg-muted/50">
-                          {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileTypeTile name={f.name} />}
-                        </div>
-                        <div className="space-y-0.5 p-2.5">
-                          <div className="truncate text-sm font-medium">{f.name}</div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {formatBytes(f.size)} · <Ago ts={f.created} />
-                          </div>
-                          {placeOf(f.folder) && <div className="truncate text-xs text-muted-foreground">in {placeOf(f.folder)}</div>}
-                          {d.showFiles && f.own && <div className="text-xs text-green-700 dark:text-green-400">Sent by you</div>}
-                        </div>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                <RecipientFiles files={d.files} base={base} placeOf={placeOf} showFiles={d.showFiles} view={fileView} />
               )}
             </div>
 
@@ -416,6 +404,62 @@ function Open({ data: d }: { data: OpenData }) {
       <NewFolderDialog open={newFolder} onOpenChange={setNewFolder} parent={null} parentName={d.name} note="New folders are created at the top level, next to the others." />
       {current && <RenameDialog open={renaming} onOpenChange={setRenaming} folder={current} />}
     </Shell>
+  )
+}
+
+type RFile = OpenData["files"][number]
+
+/** The recipient's files: a list (default), or an image grid whose thumbnail size follows the slider. */
+function RecipientFiles({ files, base, placeOf, showFiles, view }: { files: RFile[]; base: string; placeOf: (folder: string | null) => string | null; showFiles: boolean; view: ReturnType<typeof useFileView> }) {
+  if (view.view === "list") {
+    return (
+      <ul className="divide-y rounded-lg border bg-card">
+        {files.map((f) => (
+          <li key={f.id}>
+            <a href={`${base}/files/${f.id}/download`} download title={`Download ${f.name}`} className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-accent/50">
+              <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon name={f.name} className="size-4 text-muted-foreground" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{f.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {placeOf(f.folder) ? `in ${placeOf(f.folder)} · ` : ""}
+                  {showFiles && f.own ? "sent by you" : <Ago ts={f.created} />}
+                </span>
+              </span>
+              <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">{formatBytes(f.size)}</span>
+              <Download className="size-4 shrink-0 text-muted-foreground" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  const small = view.tile < 160
+  return (
+    <ul className="grid gap-3" style={gridStyle(view.tile)}>
+      {files.map((f) => (
+        <li key={f.id} className="overflow-hidden rounded-lg border bg-card">
+          <a href={`${base}/files/${f.id}/download`} download className="group block" title={`Download ${f.name}`}>
+            <div className="flex aspect-[4/3] items-center justify-center bg-muted/50">
+              {canPreview(f.name, f.size) ? <img src={`${base}/files/${f.id}/preview`} alt="" loading="lazy" className="size-full object-cover" /> : <FileTypeTile name={f.name} />}
+            </div>
+            <div className={small ? "p-1.5" : "space-y-0.5 p-2.5"}>
+              <div className={`truncate font-medium ${small ? "text-xs" : "text-sm"}`}>{f.name}</div>
+              {!small && (
+                <>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {formatBytes(f.size)} · <Ago ts={f.created} />
+                  </div>
+                  {placeOf(f.folder) && <div className="truncate text-xs text-muted-foreground">in {placeOf(f.folder)}</div>}
+                  {showFiles && f.own && <div className="text-xs text-green-700 dark:text-green-400">Sent by you</div>}
+                </>
+              )}
+            </div>
+          </a>
+        </li>
+      ))}
+    </ul>
   )
 }
 
