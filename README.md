@@ -56,6 +56,7 @@ Harbor Studio website/            one link: https://files.example.com/s/3f9c…
 **Received files**
 - A folder shows its subfolders as cards and **everything inside it**, subfolders included, so the root is never empty (switch to *This folder only* when you want).
 - Grid view with image previews, or list view; search across the whole collection; select, move, rename, delete and download.
+- **Download a folder as a ZIP**, subfolders and empty folders included, or the whole collection with *Download all as ZIP*. Your browser builds the archive while it streams each file, so the Worker stays within the free plan's CPU limit; in Chrome and Edge, folders over 500 MB are written straight to disk. Up to 4 GB per archive.
 - Per-folder file counts, storage use per collection and for the installation, last-upload times.
 - An overview with open collections, files received, storage against the limit, uploads in progress and a 30-day chart.
 

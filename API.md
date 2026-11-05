@@ -84,6 +84,7 @@ await fetch(`${base}/uploads/${init.id}/complete`, { method: "POST", headers, bo
 | DELETE | `/collections/<id>/files/<file>` | Delete the file and its stored contents |
 | GET | `/collections/<id>/files/<file>/download` | Stream the file as an attachment |
 | GET | `/collections/<id>/files/<file>/preview` | Raster image preview (PNG, JPEG, GIF, WebP, AVIF up to 10 MB) |
+| GET | `/collections/<id>/archive?folder=<path or id>` | What a ZIP of the folder (empty: the whole collection) contains: `entries` with their `path` inside the archive (folders end with `/`), file ids and sizes. Download each file and zip them on your side |
 | GET, POST | `/collections/<id>/links` | List folder links; create one with `{folder}` |
 | DELETE | `/collections/<id>/links/<token>` | Revoke a folder link |
 | PUT, POST... | `/collections/<id>/upload/...`, `/collections/<id>/uploads/...` | The same upload endpoints as share links, as administrator |

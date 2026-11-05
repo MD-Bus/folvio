@@ -16,7 +16,7 @@ import {
   visibleFolders,
   type Access,
 } from "./collections.server"
-import { abortUpload, completeUpload, deleteFiles, findFolderParam, getFile, initUpload, listFiles, SINGLE_UPLOAD_MAX, streamFile, updateFiles, uploadPart, uploadWhole } from "./files.server"
+import { abortUpload, archiveManifest, completeUpload, deleteFiles, findFolderParam, getFile, initUpload, listFiles, SINGLE_UPLOAD_MAX, streamFile, updateFiles, uploadPart, uploadWhole } from "./files.server"
 import { adminAccess, apiRecipientAccess, createLink, findShare, listLinks, openShare, RECIPIENT_HEADER, revokeLink } from "./share.server"
 import { folderPath } from "#/lib/folders"
 import { fail, HttpError } from "./util.server"
@@ -111,6 +111,9 @@ async function collectionRoutes(request: Request, env: Env, access: Access, rest
     if (!name) fail(400, "Put the file name in the address: PUT .../upload/<file name>?folder=<folder path>.")
     return json(await uploadWhole(env, access, { name, folder: findFolderParam(access, url.searchParams.get("folder")) }, request), 201)
   }
+
+  // What a ZIP of a folder contains (the dashboard builds the archive in the browser, streaming each file).
+  if (section === "archive" && method === "GET") return json(await archiveManifest(env, access, findFolderParam(access, url.searchParams.get("folder"))))
 
   if (section === "files") {
     if (!id && method === "GET") {

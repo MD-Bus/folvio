@@ -99,6 +99,54 @@ export async function folderCounts(env: Env, access: Access): Promise<Record<str
   return out
 }
 
+/** Largest archive the dashboard builds: plain ZIP (no ZIP64) holds 4 GiB and 65,535 entries. */
+export const ARCHIVE_MAX_BYTES = 4_000_000_000
+export const ARCHIVE_MAX_ENTRIES = 60_000
+
+export type ArchiveEntry = { path: string; id?: string; size: number; created?: number }
+
+/**
+ * Everything a ZIP of `folder` (null: the whole collection) contains, for the browser to build it: each file with
+ * its path inside the archive, and each folder (paths ending in "/") so empty folders are kept. Names that collide
+ * within a folder get " (2)", " (3)"... Administrator only.
+ */
+export async function archiveManifest(env: Env, access: Access, folder: string | null): Promise<{ name: string; entries: ArchiveEntry[]; files: number; bytes: number }> {
+  if (!access.admin) fail(403, "Only the administrator can download folders.")
+  const root = folder ? access.folders.find((f) => f.id === folder) : null
+  if (folder && !root) fail(404, "Folder not found.")
+  const ids = subtree(access, folder)
+  const rows = await all<{ id: string; name: string; size: number; folder: string | null; created: number }>(
+    env,
+    `SELECT id, name, size, folder, created FROM uploads WHERE collection = ? AND state = 'complete' AND ${folder === null ? "(folder IS NULL OR folder IN (SELECT value FROM json_each(?)))" : "folder IN (SELECT value FROM json_each(?))"} ORDER BY folder, name LIMIT ?`,
+    access.c.id,
+    JSON.stringify(ids),
+    ARCHIVE_MAX_ENTRIES + 1,
+  )
+  const pathOf = (id: string | null): string => {
+    const parts: string[] = []
+    for (let f = id; f && f !== folder; f = access.folders.find((x) => x.id === f)?.parent ?? null) {
+      parts.unshift(access.folders.find((x) => x.id === f)!.name)
+    }
+    return parts.length ? `${parts.join("/")}/` : ""
+  }
+  const entries: ArchiveEntry[] = ids.filter((id) => id !== folder).map((id) => ({ path: pathOf(id), size: 0 }))
+  const taken = new Set(entries.map((e) => e.path.toLowerCase()))
+  let bytes = 0
+  for (const r of rows) {
+    const dir = pathOf(r.folder)
+    const dot = r.name.lastIndexOf(".")
+    const [stem, ext] = dot > 0 ? [r.name.slice(0, dot), r.name.slice(dot)] : [r.name, ""]
+    let path = `${dir}${r.name}`
+    for (let n = 2; taken.has(path.toLowerCase()); n++) path = `${dir}${stem} (${n})${ext}`
+    taken.add(path.toLowerCase())
+    entries.push({ path, id: r.id, size: r.size, created: r.created })
+    bytes += r.size
+  }
+  if (entries.length > ARCHIVE_MAX_ENTRIES) fail(413, `This folder has more than ${ARCHIVE_MAX_ENTRIES.toLocaleString("en-GB")} files: download its subfolders separately.`)
+  if (bytes > ARCHIVE_MAX_BYTES) fail(413, "This folder holds more than 4 GB: download its subfolders separately.")
+  return { name: root?.name ?? access.c.name, entries, files: rows.length, bytes }
+}
+
 /** A received file the caller may see: the administrator any, a recipient their own or, with show_files, any in a visible folder. */
 export async function getFile(env: Env, access: Access, id: string): Promise<FileRow> {
   const file = await one<FileRow>(env, "SELECT * FROM uploads WHERE id = ? AND collection = ? AND state = 'complete'", id, access.c.id)

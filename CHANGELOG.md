@@ -14,6 +14,7 @@ A full rebuild on the stack and dashboard of [Warden](https://github.com/momardi
 - Upload queue with drag and drop, progress per file, cancel, a retry per part, and a warning before leaving the page.
 - Recipient page: instructions, a folder menu saying where to put files (counts, view-only folders), folder cards, previews of the images they sent, a first-visit tour with Next, Back and Skip ("How it works" reopens it), password page, expired page, phone layout.
 - Folders show their subfolders as cards and everything inside them, subfolders included (admin and recipients); `recursive=1` in the API. Admins can switch to "This folder only".
+- Download a folder, or the whole collection, as a ZIP with its subfolders. The browser builds the archive (stored entries, UTF-8 names, CRC-32 while streaming), written to disk in Chrome and Edge above 500 MB; `GET /collections/<id>/archive` lists the entries.
 - Option "Recipients see all files" (`show_files`): everyone with the link sees, previews and downloads all files of the folders they can open. Off by default.
 - Option "Delete the collection at this date" (`auto_delete`): the hourly clean-up deletes the collection and its files after its expiry, in bounded batches. Migration 0005 adds both columns.
 - Automatic provisioning of D1 (`folvio-db`) and R2 (`folvio-files`) on deploy, reusing them when they already exist (no ids to fill in), migrations applied by the Worker on the first request, `DB_SUFFIX` build variable, notice for previews without a database.

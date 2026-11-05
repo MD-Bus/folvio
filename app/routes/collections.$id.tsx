@@ -17,6 +17,7 @@ import { PageTitle } from "#/components/page-title"
 import { onlyTabChanged, RouteTabs, useRouteTab } from "#/components/route-tabs"
 import { Ago, When } from "#/components/time"
 import { DropZone, UploadList } from "#/components/upload-panel"
+import { ZipDownloadButton } from "#/components/zip-download"
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert"
 import { Badge } from "#/components/ui/badge"
 import { Button } from "#/components/ui/button"
@@ -344,6 +345,7 @@ function FilesTab({ collection: c, folders, usage, files, next, folder, q, scope
                 <Plus /> Folder
               </Button>
             )}
+            {!q && (usage[folder ?? ""]?.total ?? 0) + subfolders.length > 0 && <ZipDownloadButton apiBase={apiBase} folder={folder} label={current?.name ?? c.name} />}
             {current && !q && (
               <Button variant="outline" size="sm" onClick={() => setManage(true)}>
                 <FolderCog /> Manage folder
